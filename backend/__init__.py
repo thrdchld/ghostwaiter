@@ -1,0 +1,2 @@
+"""GhostWriter backend package."""
+

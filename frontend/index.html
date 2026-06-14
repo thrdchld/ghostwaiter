@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#171412">
+  <meta name="description" content="Asisten menulis personal yang mempelajari gaya dan pola berpikir Anda.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/style.css">
+  <title>GhostWriter</title>
+</head>
+<body>
+  <div id="login-screen" class="login-screen hidden">
+    <form id="login-form" class="login-card">
+      <div class="brand-mark">G</div>
+      <h1>GhostWriter</h1>
+      <p>Masuk ke ruang menulis personal Anda.</p>
+      <label for="login-password">Password</label>
+      <input id="login-password" type="password" autocomplete="current-password" required>
+      <button class="button primary" type="submit">Masuk</button>
+      <p id="login-error" class="error-text"></p>
+    </form>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <header class="topbar">
+      <button id="workspace-button" class="workspace-button" type="button">
+        <span class="eyebrow">Workspace</span>
+        <strong id="workspace-name">Writing</strong>
+      </button>
+      <div class="status-cluster">
+        <button id="model-status" class="status-pill" type="button"><i></i><span>AI</span></button>
+        <button id="sync-status" class="status-pill" type="button"><i></i><span>Local</span></button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section id="view-chat" class="view active" aria-label="Chat">
+        <div class="section-heading">
+          <div><span class="eyebrow">Conversation</span><h1 id="chat-title">Obrolan baru</h1></div>
+          <button id="chat-list-button" class="icon-button" type="button" aria-label="Riwayat chat">☷</button>
+        </div>
+        <div id="chat-messages" class="chat-messages">
+          <div class="empty-state"><strong>Mulai dari sebuah pemikiran.</strong><span>Diskusikan ide, susun argumen, atau minta umpan balik.</span></div>
+        </div>
+        <form id="chat-form" class="composer">
+          <textarea id="chat-input" rows="1" placeholder="Tulis pesan..." required></textarea>
+          <button id="chat-send" class="send-button" type="submit" aria-label="Kirim">↑</button>
+        </form>
+      </section>
+
+      <section id="view-write" class="view" aria-label="Write">
+        <div class="section-heading">
+          <div><span class="eyebrow">Writing desk</span><h1>Ruang Tulis</h1></div>
+          <button id="draft-list-button" class="text-button" type="button">Draft</button>
+        </div>
+        <div class="prompt-card">
+          <textarea id="write-prompt" rows="3" placeholder="Apa yang ingin Anda tulis?"></textarea>
+          <div class="prompt-actions">
+            <select id="write-mode" aria-label="Mode penulisan">
+              <option value="write">Tulis</option>
+              <option value="rewrite">Tulis ulang</option>
+              <option value="paraphrase">Parafrase</option>
+            </select>
+            <button id="generate-button" class="button primary compact" type="button">Generate</button>
+          </div>
+        </div>
+        <div class="editor-card">
+          <input id="draft-title" class="title-input" value="Untitled" aria-label="Judul draft">
+          <textarea id="draft-content" class="document-editor" placeholder="Hasil AI dan tulisan Anda muncul di sini..."></textarea>
+          <div class="editor-footer">
+            <span id="save-state">Belum disimpan</span>
+            <div>
+              <button id="copy-button" class="text-button" type="button">Copy</button>
+              <button id="train-button" class="text-button accent" type="button">Train</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-brain" class="view" aria-label="Brain">
+        <div class="section-heading">
+          <div><span class="eyebrow">Personal intelligence</span><h1>Brain</h1></div>
+          <button id="refresh-brain" class="icon-button" type="button" aria-label="Refresh">↻</button>
+        </div>
+        <div class="brain-stats">
+          <article><strong id="style-count">0</strong><span>Style rules</span></article>
+          <article><strong id="thinking-count">0</strong><span>Thinking patterns</span></article>
+          <article><strong id="revision-count">0</strong><span>Revisions</span></article>
+        </div>
+        <div class="tab-row">
+          <button class="chip active" data-brain-tab="style" type="button">Style</button>
+          <button class="chip" data-brain-tab="thinking" type="button">Thinking</button>
+          <button class="chip" data-brain-tab="raw" type="button">Ajarkan</button>
+          <button class="chip" data-brain-tab="references" type="button">References</button>
+        </div>
+        <div id="brain-list" class="insight-list"></div>
+        <div id="brain-teach" class="teach-card hidden">
+          <label for="raw-writing">Contoh tulisan asli</label>
+          <textarea id="raw-writing" rows="9" placeholder="Tempel tulisan Anda agar GhostWriter mempelajari gayanya..."></textarea>
+          <button id="learn-raw-button" class="button primary" type="button">Analisis tulisan</button>
+        </div>
+        <div id="reference-search" class="teach-card hidden">
+          <label for="reference-query">Cari referensi internet</label>
+          <div class="inline-form"><input id="reference-query" placeholder="Topik atau kata kunci"><button id="reference-button" class="button primary compact" type="button">Cari</button></div>
+          <div id="reference-list" class="reference-list"></div>
+        </div>
+      </section>
+
+      <section id="view-menu" class="view" aria-label="Menu">
+        <div class="section-heading"><div><span class="eyebrow">System</span><h1>Menu</h1></div></div>
+        <div class="settings-list">
+          <button id="model-button" class="setting-row" type="button"><span><strong>Model AI</strong><small id="model-detail">Memuat...</small></span><b>›</b></button>
+          <button id="manual-sync" class="setting-row" type="button"><span><strong>Sync GitHub</strong><small id="sync-detail">Belum dikonfigurasi</small></span><b>↻</b></button>
+          <button id="snapshot-button" class="setting-row" type="button"><span><strong>Buat snapshot</strong><small>Backup lokal sebelum perubahan besar</small></span><b>+</b></button>
+          <a class="setting-row" href="/api/export"><span><strong>Export data</strong><small>Unduh seluruh data JSON</small></span><b>↓</b></a>
+          <button id="install-button" class="setting-row hidden" type="button"><span><strong>Install aplikasi</strong><small>Tambahkan GhostWriter ke perangkat</small></span><b>+</b></button>
+          <button id="logout-button" class="setting-row danger-row" type="button"><span><strong>Keluar</strong><small>Hapus sesi di perangkat ini</small></span><b>›</b></button>
+        </div>
+        <p class="version">GhostWriter v1.0 · Hugging Face Space</p>
+      </section>
+    </main>
+
+    <button id="fab" class="fab" type="button" aria-label="Quick actions">+</button>
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-view="chat" type="button"><span>◌</span>Chat</button>
+      <button class="nav-item" data-view="write" type="button"><span>✎</span>Write</button>
+      <button class="nav-item" data-view="brain" type="button"><span>◇</span>Brain</button>
+      <button class="nav-item" data-view="menu" type="button"><span>☰</span>Menu</button>
+    </nav>
+  </div>
+
+  <div id="backdrop" class="backdrop hidden"></div>
+  <aside id="sheet" class="sheet hidden" aria-modal="true">
+    <div class="sheet-handle"></div>
+    <div class="sheet-heading"><h2 id="sheet-title">Menu</h2><button id="sheet-close" class="icon-button" type="button">×</button></div>
+    <div id="sheet-content"></div>
+  </aside>
+  <div id="toast" class="toast hidden"></div>
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>
+
