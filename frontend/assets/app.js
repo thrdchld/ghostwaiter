@@ -777,14 +777,7 @@ async function manualSync() {
   }
 }
 
-async function createSnapshot() {
-  try {
-    const result = await jsonApi("/api/snapshot/create", {method: "POST"});
-    toast(`Snapshot ${result.id} dibuat`);
-  } catch (error) {
-    toast(error.message);
-  }
-}
+
 
 function bindEvents() {
   $$(".nav-item").forEach(button => button.onclick = () => showView(button.dataset.view));
@@ -854,7 +847,7 @@ function bindEvents() {
   $("#model-status").onclick = showModelSheet;
   $("#sync-status").onclick = manualSync;
   $("#manual-sync").onclick = manualSync;
-  $("#snapshot-button").onclick = createSnapshot;
+
   $("#logout-button").onclick = async () => {
     await jsonApi("/api/auth/logout", {method: "POST"});
     localStorage.removeItem("ghostwriter:session");
