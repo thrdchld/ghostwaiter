@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, Header, Query, Response, UploadFile, File
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, Header, Query, Response, UploadFile, File, Cookie
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
