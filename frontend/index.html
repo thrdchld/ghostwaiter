@@ -7,7 +7,7 @@
   <meta name="description" content="Asisten menulis personal yang mempelajari gaya dan pola berpikir Anda.">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="/assets/style.css?v=2">
   <title>GhostWriter</title>
 </head>
 <body>
@@ -93,6 +93,7 @@
           <button class="chip active" data-brain-tab="style" type="button">Style</button>
           <button class="chip" data-brain-tab="thinking" type="button">Thinking</button>
           <button class="chip" data-brain-tab="raw" type="button">Ajarkan</button>
+          <button class="chip" data-brain-tab="proposals" type="button">Usulan <span id="proposal-count"></span></button>
           <button class="chip" data-brain-tab="references" type="button">References</button>
         </div>
         <div id="brain-list" class="insight-list"></div>
@@ -106,6 +107,7 @@
           <div class="inline-form"><input id="reference-query" placeholder="Topik atau kata kunci"><button id="reference-button" class="button primary compact" type="button">Cari</button></div>
           <div id="reference-list" class="reference-list"></div>
         </div>
+        <div id="proposal-list" class="proposal-list hidden"></div>
       </section>
 
       <section id="view-menu" class="view" aria-label="Menu">
@@ -122,7 +124,6 @@
       </section>
     </main>
 
-    <button id="fab" class="fab" type="button" aria-label="Quick actions">+</button>
     <nav class="bottom-nav">
       <button class="nav-item active" data-view="chat" type="button"><span>◌</span>Chat</button>
       <button class="nav-item" data-view="write" type="button"><span>✎</span>Write</button>
@@ -138,7 +139,6 @@
     <div id="sheet-content"></div>
   </aside>
   <div id="toast" class="toast hidden"></div>
-  <script src="/assets/app.js" defer></script>
+  <script src="/assets/app.js?v=2" defer></script>
 </body>
 </html>
-

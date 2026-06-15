@@ -1,5 +1,5 @@
-const CACHE = "ghostwriter-shell-v1";
-const SHELL = ["/", "/assets/style.css", "/assets/app.js", "/assets/icon.svg", "/manifest.webmanifest"];
+const CACHE = "ghostwriter-shell-v3";
+const SHELL = ["/", "/assets/style.css?v=2", "/assets/app.js?v=2", "/assets/icon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));

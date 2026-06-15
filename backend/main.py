@@ -15,13 +15,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .ai import AIUnavailable, ai_service
 from .config import ROOT_DIR, settings
+from .context import build_chat_context
 from .storage import new_id, now_iso, safe_id, store
 
 
@@ -71,6 +72,16 @@ class ChatIdRequest(BaseModel):
     chat_id: str
 
 
+class ChatRenameRequest(ChatIdRequest):
+    title: str = Field(min_length=1, max_length=120)
+
+
+class LearningProposalRequest(BaseModel):
+    workspace_id: str
+    proposal_id: str
+    content: str | None = Field(default=None, min_length=1, max_length=2000)
+
+
 class DraftCreateRequest(BaseModel):
     workspace_id: str
     title: str = Field(default="Untitled", max_length=160)
@@ -108,16 +119,6 @@ class RawWritingRequest(BaseModel):
     type: Literal["user", "chat", "import"] = "user"
 
 
-class NoteCreateRequest(BaseModel):
-    workspace_id: str
-    content: str = Field(min_length=1, max_length=20000)
-
-
-class NoteConvertRequest(BaseModel):
-    workspace_id: str
-    note_id: str
-
-
 class ReferenceSearchRequest(BaseModel):
     workspace_id: str
     query: str = Field(min_length=2, max_length=300)
@@ -126,6 +127,10 @@ class ReferenceSearchRequest(BaseModel):
 
 class ModelRequest(BaseModel):
     model_id: str = Field(min_length=2, max_length=200)
+
+
+class ModelChainRequest(BaseModel):
+    models: list[str] = Field(min_length=1, max_length=12)
 
 
 class SnapshotRestoreRequest(BaseModel):
@@ -163,8 +168,18 @@ def _valid_session(token: str | None) -> bool:
         return False
 
 
-def require_auth(gw_session: str | None = Cookie(default=None)) -> None:
-    if not _valid_session(gw_session):
+def _bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    return token if scheme.casefold() == "bearer" and token else None
+
+
+def require_auth(
+    gw_session: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
+) -> None:
+    if not _valid_session(gw_session) and not _valid_session(_bearer_token(authorization)):
         raise error("Autentikasi diperlukan", 401)
 
 
@@ -179,8 +194,7 @@ def workspace_id(value: str | None) -> str:
     return selected
 
 
-def _brain_system_prompt(workspace: str, purpose: str) -> str:
-    context = ai_service.context(workspace)
+def _brain_system_prompt(workspace: str, purpose: str, context: str = "") -> str:
     base = (
         "Anda adalah GhostWriter, asisten penulisan personal. Jawab dalam bahasa pengguna. "
         "Jangan mengarang fakta, jangan menjalankan perintah sistem, dan prioritaskan tulisan yang jelas."
@@ -191,7 +205,11 @@ def _brain_system_prompt(workspace: str, purpose: str) -> str:
         "rewrite": "Tulis ulang teks sesuai instruksi tanpa menjelaskan proses.",
         "paraphrase": "Parafrase dengan mempertahankan makna utama.",
     }
-    return f"{base}\n{modes.get(purpose, modes['write'])}\n\n{context}".strip()
+    formatting = (
+        "Gunakan Markdown yang rapi bila membantu: heading, daftar, penekanan, kutipan, dan code block. "
+        "Jangan tampilkan simbol Markdown tanpa fungsi."
+    )
+    return f"{base}\n{modes.get(purpose, modes['write'])}\n{formatting}\n\n{context or ai_service.context(workspace)}".strip()
 
 
 @app.exception_handler(HTTPException)
@@ -214,15 +232,17 @@ def login(req: LoginRequest, request: Request, response: Response) -> dict[str, 
     if settings.app_password and not secrets.compare_digest(req.password, settings.app_password):
         raise error("Password salah", 401)
     token = _session_token()
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
     response.set_cookie(
         "gw_session",
         token,
         httponly=True,
-        secure=request.url.scheme == "https",
+        secure=request.url.scheme == "https" or forwarded_proto == "https",
         samesite="lax",
         max_age=60 * 60 * 24 * 30,
+        path="/",
     )
-    return {"status": "success"}
+    return {"status": "success", "session_token": token}
 
 
 @app.post("/api/auth/logout")
@@ -232,8 +252,14 @@ def logout(response: Response) -> dict[str, str]:
 
 
 @app.get("/api/auth/status")
-def auth_status(gw_session: str | None = Cookie(default=None)) -> dict[str, bool]:
-    return {"authenticated": _valid_session(gw_session), "password_required": bool(settings.app_password)}
+def auth_status(
+    gw_session: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
+) -> dict[str, bool]:
+    return {
+        "authenticated": _valid_session(gw_session) or _valid_session(_bearer_token(authorization)),
+        "password_required": bool(settings.app_password),
+    }
 
 
 @app.get("/api/workspace/list", dependencies=[Depends(require_auth)])
@@ -281,15 +307,23 @@ def new_chat(req: WorkspaceRequest) -> dict[str, str]:
             "created_at": timestamp,
             "updated_at": timestamp,
             "archived": False,
+            "summary": "",
+            "accessed_workspaces": [],
         },
     )
     return {"chat_id": chat_id}
 
 
 @app.get("/api/chat/list", dependencies=[Depends(require_auth)])
-def list_chats(workspace_id_query: str | None = Query(default=None, alias="workspace_id")) -> dict[str, Any]:
+def list_chats(
+    workspace_id_query: str | None = Query(default=None, alias="workspace_id"),
+    archived: bool | None = Query(default=None),
+) -> dict[str, Any]:
     workspace = workspace_id(workspace_id_query)
-    return {"items": store.list_entities(workspace, "chats")}
+    items = store.list_entities(workspace, "chats")
+    if archived is not None:
+        items = [item for item in items if bool(item.get("archived")) is archived]
+    return {"items": items}
 
 
 @app.get("/api/chat/session/{chat_id}", dependencies=[Depends(require_auth)])
@@ -312,12 +346,124 @@ def archive_chat(req: ChatIdRequest) -> dict[str, str]:
     return {"status": "success"}
 
 
+@app.post("/api/chat/restore", dependencies=[Depends(require_auth)])
+def restore_chat(req: ChatIdRequest) -> dict[str, str]:
+    try:
+        chat = store.get_entity(workspace_id(req.workspace_id), "chats", req.chat_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise error("Chat tidak ditemukan", 404) from exc
+    chat["archived"] = False
+    chat["updated_at"] = now_iso()
+    store.save_entity(req.workspace_id, "chats", chat)
+    return {"status": "success"}
+
+
+@app.post("/api/chat/rename", dependencies=[Depends(require_auth)])
+def rename_chat(req: ChatRenameRequest) -> dict[str, str]:
+    try:
+        chat = store.get_entity(workspace_id(req.workspace_id), "chats", req.chat_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise error("Chat tidak ditemukan", 404) from exc
+    chat["title"] = " ".join(req.title.split())
+    chat["updated_at"] = now_iso()
+    store.save_entity(req.workspace_id, "chats", chat)
+    return {"status": "success", "title": chat["title"]}
+
+
+@app.post("/api/chat/delete-permanent", dependencies=[Depends(require_auth)])
+def permanently_delete_chat(req: ChatIdRequest) -> dict[str, str]:
+    try:
+        chat = store.get_entity(workspace_id(req.workspace_id), "chats", req.chat_id)
+        if not chat.get("archived"):
+            raise error("Chat harus diarsipkan sebelum dihapus permanen")
+        store.permanently_delete_entity(req.workspace_id, "chats", req.chat_id)
+    except HTTPException:
+        raise
+    except (FileNotFoundError, ValueError) as exc:
+        raise error("Chat tidak ditemukan", 404) from exc
+    return {"status": "success"}
+
+
+async def _analyze_chat_background(workspace: str, chat_id: str) -> None:
+    try:
+        chat = store.get_entity(workspace, "chats", chat_id)
+        analysis = await ai_service.analyze_chat(chat.get("messages", []), chat.get("summary", ""))
+        chat["summary"] = analysis["summary"]
+        chat["updated_at"] = now_iso()
+        store.save_entity(workspace, "chats", chat)
+
+        root = store.workspace_path(workspace)
+        memory_path = root / "brain" / "conversation_memory.json"
+        memory = store.read_json(memory_path)
+        known_concepts = {
+            (item.get("content", "") if isinstance(item, dict) else str(item)).casefold()
+            for item in memory.get("items", [])
+        }
+        for concept in analysis["concepts"]:
+            if concept.casefold() not in known_concepts:
+                memory["items"].append(
+                    {
+                        "id": new_id("concept"),
+                        "content": concept,
+                        "source_chat_id": chat_id,
+                        "created_at": now_iso(),
+                    }
+                )
+        memory["items"] = memory["items"][-200:]
+        store.write_json(memory_path, memory)
+
+        proposal_path = root / "brain" / "learning_proposals.json"
+        proposals = store.read_json(proposal_path)
+        existing = {
+            (item.get("type"), item.get("content", "").casefold())
+            for item in proposals.get("items", [])
+            if isinstance(item, dict) and item.get("status", "pending") != "rejected"
+        }
+        for item in analysis["proposals"]:
+            key = (item["type"], item["content"].casefold())
+            if key not in existing:
+                proposals["items"].insert(
+                    0,
+                    {
+                        "id": new_id("learn"),
+                        "type": item["type"],
+                        "content": item["content"],
+                        "source_chat_id": chat_id,
+                        "status": "pending",
+                        "created_at": now_iso(),
+                        "updated_at": now_iso(),
+                    },
+                )
+        proposals["items"] = proposals["items"][:200]
+        store.write_json(proposal_path, proposals)
+
+        summary_path = root / "summary" / "workspace_summary.json"
+        workspace_summary = store.read_json(summary_path)
+        summaries = [
+            item.get("summary", "")
+            for item in store.list_entities(workspace, "chats")[:12]
+            if item.get("summary") and not item.get("archived")
+        ]
+        workspace_summary["content"] = "\n".join(f"- {item}" for item in summaries)
+        workspace_summary["updated_at"] = now_iso()
+        store.write_json(summary_path, workspace_summary)
+        store.enqueue_sync("brain", workspace, {"chat_id": chat_id, "analysis": "updated"})
+    except Exception:
+        return
+
+
 async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str):
     chat["messages"].append({"role": "user", "content": user_message, "timestamp": now_iso()})
-    messages = [{"role": "system", "content": _brain_system_prompt(workspace, "chat")}]
+    app_context, accessed_workspaces = build_chat_context(workspace, user_message)
+    chat["accessed_workspaces"] = accessed_workspaces
+    messages = [{"role": "system", "content": _brain_system_prompt(workspace, "chat", app_context)}]
+    if chat.get("summary"):
+        messages.append(
+            {"role": "system", "content": f"Ringkasan percakapan sebelumnya:\n{chat['summary']}"}
+        )
     messages.extend(
         {"role": item["role"], "content": item["content"]}
-        for item in chat["messages"][-20:]
+        for item in chat["messages"][-14:]
         if item["role"] in {"user", "assistant"}
     )
     chunks: list[str] = []
@@ -335,6 +481,8 @@ async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str):
         if chat["title"] == "Obrolan baru":
             chat["title"] = user_message[:60]
         store.save_entity(workspace, "chats", chat)
+        if answer:
+            asyncio.create_task(_analyze_chat_background(workspace, chat["id"]))
 
 
 @app.post("/api/chat/send", dependencies=[Depends(require_auth)])
@@ -345,6 +493,8 @@ def send_chat(req: ChatRequest) -> StreamingResponse:
             chat = store.get_entity(workspace, "chats", req.chat_id)
         except (FileNotFoundError, ValueError) as exc:
             raise error("Chat tidak ditemukan", 404) from exc
+        if chat.get("archived"):
+            raise error("Chat berada di arsip. Restore chat sebelum melanjutkan.", 409)
     else:
         chat_id = new_id("chat")
         timestamp = now_iso()
@@ -356,6 +506,8 @@ def send_chat(req: ChatRequest) -> StreamingResponse:
             "created_at": timestamp,
             "updated_at": timestamp,
             "archived": False,
+            "summary": "",
+            "accessed_workspaces": [],
         }
     return StreamingResponse(
         _chat_stream(workspace, chat, req.message),
@@ -519,61 +671,17 @@ def brain_profile(workspace_id_query: str | None = Query(default=None, alias="wo
         "thinking_profile": store.read_json(brain / "thinking_profile.json"),
         "rules": store.read_json(brain / "rules.json").get("items", []),
         "memory": store.read_json(brain / "memory.json").get("items", []),
+        "conversation_memory": store.read_json(brain / "conversation_memory.json").get("items", []),
+        "pending_proposals": len(
+            [
+                item
+                for item in store.read_json(brain / "learning_proposals.json").get("items", [])
+                if item.get("status", "pending") == "pending"
+            ]
+        ),
         "revision_count": len(store.list_entities(workspace, "learning/revision_pairs")),
         "raw_writing_count": len(store.list_entities(workspace, "learning/raw_writing")),
     }
-
-
-@app.post("/api/note/create", dependencies=[Depends(require_auth)])
-def create_note(req: NoteCreateRequest) -> dict[str, Any]:
-    workspace = workspace_id(req.workspace_id)
-    path = store.workspace_path(workspace) / "quick_notes.json"
-    data = store.read_json(path)
-    note = {
-        "id": new_id("note"),
-        "content": req.content,
-        "converted_to_draft": False,
-        "created_at": now_iso(),
-    }
-    data["items"].insert(0, note)
-    store.write_json(path, data)
-    store.enqueue_sync("note", workspace, note)
-    return note
-
-
-@app.get("/api/note/list", dependencies=[Depends(require_auth)])
-def list_notes(workspace_id_query: str | None = Query(default=None, alias="workspace_id")) -> dict[str, Any]:
-    workspace = workspace_id(workspace_id_query)
-    return store.read_json(store.workspace_path(workspace) / "quick_notes.json")
-
-
-@app.post("/api/note/convert-to-draft", dependencies=[Depends(require_auth)])
-def convert_note(req: NoteConvertRequest) -> dict[str, Any]:
-    workspace = workspace_id(req.workspace_id)
-    path = store.workspace_path(workspace) / "quick_notes.json"
-    notes = store.read_json(path)
-    note = next((item for item in notes["items"] if item["id"] == req.note_id), None)
-    if not note:
-        raise error("Catatan tidak ditemukan", 404)
-    timestamp = now_iso()
-    draft = store.save_entity(
-        workspace,
-        "drafts",
-        {
-            "schema_version": 1,
-            "id": new_id("draft"),
-            "title": note["content"][:60] or "Quick note",
-            "content": note["content"],
-            "collections": [],
-            "tags": [],
-            "created_at": timestamp,
-            "updated_at": timestamp,
-            "status": "active",
-        },
-    )
-    note["converted_to_draft"] = True
-    store.write_json(path, notes)
-    return draft
 
 
 @app.post("/api/reference/search", dependencies=[Depends(require_auth)])
@@ -629,8 +737,11 @@ def get_reference(
 
 @app.get("/api/model/status", dependencies=[Depends(require_auth)])
 def model_status() -> dict[str, Any]:
+    models_file = store.read_json(store.root / "system" / "models.json")
     return {
         "active_model": ai_service.active_model,
+        "default_model": models_file.get("default_model", settings.default_model),
+        "fallback_models": models_file.get("fallback_models", []),
         "fallback_chain": list(ai_service.models),
         "configured": bool(settings.hf_token),
         "provider": settings.inference_provider,
@@ -642,10 +753,69 @@ def model_status() -> dict[str, Any]:
 def set_default_model(req: ModelRequest) -> dict[str, str]:
     path = store.root / "system" / "models.json"
     data = store.read_json(path)
+    previous = data.get("default_model")
     data["default_model"] = req.model_id
+    fallbacks = [item for item in data.get("fallback_models", []) if item != req.model_id]
+    if previous and previous != req.model_id:
+        fallbacks.insert(0, previous)
+    data["fallback_models"] = list(dict.fromkeys(fallbacks))[:11]
     store.write_json(path, data)
     ai_service.active_model = req.model_id
     return {"status": "success", "model_id": req.model_id}
+
+
+@app.post("/api/model/add-fallback", dependencies=[Depends(require_auth)])
+def add_fallback_model(req: ModelRequest) -> dict[str, Any]:
+    path = store.root / "system" / "models.json"
+    data = store.read_json(path)
+    if req.model_id != data.get("default_model"):
+        data["fallback_models"] = list(
+            dict.fromkeys(data.get("fallback_models", []) + [req.model_id])
+        )[:11]
+    store.write_json(path, data)
+    return {"status": "success", "fallback_models": data["fallback_models"]}
+
+
+@app.post("/api/model/remove", dependencies=[Depends(require_auth)])
+def remove_model(req: ModelRequest) -> dict[str, Any]:
+    path = store.root / "system" / "models.json"
+    data = store.read_json(path)
+    if req.model_id == data.get("default_model"):
+        raise error("Model default tidak dapat dihapus. Pilih default lain terlebih dahulu.")
+    data["fallback_models"] = [
+        item for item in data.get("fallback_models", []) if item != req.model_id
+    ]
+    store.write_json(path, data)
+    return {"status": "success", "fallback_models": data["fallback_models"]}
+
+
+@app.post("/api/model/reorder", dependencies=[Depends(require_auth)])
+def reorder_models(req: ModelChainRequest) -> dict[str, Any]:
+    unique = list(dict.fromkeys(item.strip() for item in req.models if item.strip()))
+    path = store.root / "system" / "models.json"
+    data = store.read_json(path)
+    data["default_model"] = unique[0]
+    data["fallback_models"] = unique[1:]
+    store.write_json(path, data)
+    return {"status": "success", "models": unique}
+
+
+@app.post("/api/model/test", dependencies=[Depends(require_auth)])
+async def test_model(req: ModelRequest) -> dict[str, Any]:
+    try:
+        response = await ai_service.client().chat_completion(
+            model=req.model_id,
+            messages=[{"role": "user", "content": "Balas hanya: OK"}],
+            max_tokens=8,
+            temperature=0,
+        )
+        return {
+            "status": "success",
+            "model_id": req.model_id,
+            "response": response.choices[0].message.content or "",
+        }
+    except Exception as exc:
+        raise error(f"Model tidak dapat digunakan: {exc}", 503) from exc
 
 
 @app.get("/api/model/search", dependencies=[Depends(require_auth)])
@@ -663,10 +833,83 @@ async def search_models(query: str = Query(min_length=2, max_length=100)) -> dic
                 "downloads": item.get("downloads", 0),
                 "likes": item.get("likes", 0),
                 "private": item.get("private", False),
+                "gated": item.get("gated", False),
+                "pipeline_tag": item.get("pipeline_tag", ""),
+                "inference": item.get("inference"),
             }
             for item in response.json()
         ]
     }
+
+
+def _proposal_file(workspace: str) -> Path:
+    return store.workspace_path(workspace) / "brain" / "learning_proposals.json"
+
+
+@app.get("/api/brain/proposals", dependencies=[Depends(require_auth)])
+def list_learning_proposals(
+    workspace_id_query: str | None = Query(default=None, alias="workspace_id"),
+    status: str = Query(default="pending", pattern="^(pending|approved|rejected|all)$"),
+) -> dict[str, Any]:
+    workspace = workspace_id(workspace_id_query)
+    items = store.read_json(_proposal_file(workspace)).get("items", [])
+    if status != "all":
+        items = [item for item in items if item.get("status", "pending") == status]
+    return {"items": items}
+
+
+@app.post("/api/brain/proposals/approve", dependencies=[Depends(require_auth)])
+def approve_learning_proposal(req: LearningProposalRequest) -> dict[str, Any]:
+    workspace = workspace_id(req.workspace_id)
+    path = _proposal_file(workspace)
+    data = store.read_json(path)
+    proposal = next((item for item in data["items"] if item["id"] == req.proposal_id), None)
+    if not proposal:
+        raise error("Usulan pembelajaran tidak ditemukan", 404)
+    content = (req.content or proposal["content"]).strip()
+    proposal.update({"content": content, "status": "approved", "updated_at": now_iso()})
+    brain = store.workspace_path(workspace) / "brain"
+    targets = {
+        "style": (brain / "style_profile.json", "rules"),
+        "thinking": (brain / "thinking_profile.json", "patterns"),
+        "memory": (brain / "memory.json", "items"),
+        "rule": (brain / "rules.json", "items"),
+    }
+    target_path, key = targets[proposal["type"]]
+    target = store.read_json(target_path)
+    if proposal["type"] in {"memory", "rule"}:
+        existing = {
+            (item.get("content", "") if isinstance(item, dict) else str(item)).casefold()
+            for item in target.get(key, [])
+        }
+        if content.casefold() not in existing:
+            target.setdefault(key, []).append(
+                {
+                    "id": new_id(proposal["type"]),
+                    "content": content,
+                    "source_chat_id": proposal.get("source_chat_id"),
+                    "created_at": now_iso(),
+                }
+            )
+    else:
+        target[key] = list(dict.fromkeys(target.get(key, []) + [content]))[-100:]
+    store.write_json(target_path, target)
+    store.write_json(path, data)
+    store.enqueue_sync("brain", workspace, {"proposal_id": proposal["id"], "status": "approved"})
+    return {"status": "success", "proposal": proposal}
+
+
+@app.post("/api/brain/proposals/reject", dependencies=[Depends(require_auth)])
+def reject_learning_proposal(req: LearningProposalRequest) -> dict[str, Any]:
+    workspace = workspace_id(req.workspace_id)
+    path = _proposal_file(workspace)
+    data = store.read_json(path)
+    proposal = next((item for item in data["items"] if item["id"] == req.proposal_id), None)
+    if not proposal:
+        raise error("Usulan pembelajaran tidak ditemukan", 404)
+    proposal.update({"status": "rejected", "updated_at": now_iso()})
+    store.write_json(path, data)
+    return {"status": "success"}
 
 
 def _backup_payload() -> dict[str, Any]:

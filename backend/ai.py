@@ -92,6 +92,9 @@ class AIService:
         rules = store.read_json(brain / "rules.json").get("items", [])
         memory = store.read_json(brain / "memory.json").get("items", [])
         sections = []
+        def content(item: Any) -> str:
+            return str(item.get("content", "")) if isinstance(item, dict) else str(item)
+
         if style:
             sections.append("Gaya pengguna:\n" + "\n".join(f"- {item}" for item in style[-12:]))
         if thinking:
@@ -99,12 +102,12 @@ class AIService:
         if rules:
             sections.append(
                 "Aturan eksplisit:\n"
-                + "\n".join(f"- {item.get('content', item)}" for item in rules[-12:])
+                + "\n".join(f"- {content(item)}" for item in rules[-12:])
             )
         if memory:
             sections.append(
                 "Memori relevan:\n"
-                + "\n".join(f"- {item.get('content', item)}" for item in memory[-10:])
+                + "\n".join(f"- {content(item)}" for item in memory[-10:])
             )
         return "\n\n".join(sections)
 
@@ -132,6 +135,47 @@ class AIService:
             "thinking_patterns": [
                 str(item).strip() for item in parsed.get("thinking_patterns", []) if str(item).strip()
             ][:3],
+        }
+
+    async def analyze_chat(self, messages: list[dict[str, str]], previous_summary: str = "") -> dict[str, Any]:
+        transcript = "\n".join(
+            f"{item['role'].upper()}: {item['content']}" for item in messages[-12:]
+        )
+        prompt = (
+            "Analisis percakapan untuk kesinambungan dan pembelajaran personal. Balas JSON valid saja: "
+            '{"summary":"ringkasan konsep dan keputusan","concepts":["konsep penting"],'
+            '"proposals":[{"type":"style|thinking|memory|rule","content":"usulan"}]}. '
+            "Summary dan concepts harus faktual. Proposal hanya untuk preferensi atau fakta pengguna yang cukup jelas, "
+            "maksimal 4, tanpa duplikat dan jangan menjadikan pertanyaan biasa sebagai preferensi permanen."
+        )
+        result = await self.complete(
+            [
+                {"role": "system", "content": prompt},
+                {
+                    "role": "user",
+                    "content": f"RINGKASAN SEBELUMNYA:\n{previous_summary}\n\nPERCAKAPAN:\n{transcript}",
+                },
+            ],
+            max_tokens=700,
+            temperature=0.2,
+        )
+        start, end = result.find("{"), result.rfind("}")
+        try:
+            parsed = json.loads(result[start : end + 1])
+        except (ValueError, json.JSONDecodeError):
+            parsed = {"summary": result.strip(), "concepts": [], "proposals": []}
+        allowed = {"style", "thinking", "memory", "rule"}
+        proposals = [
+            {"type": str(item.get("type", "")), "content": str(item.get("content", "")).strip()}
+            for item in parsed.get("proposals", [])
+            if isinstance(item, dict)
+            and str(item.get("type", "")) in allowed
+            and str(item.get("content", "")).strip()
+        ][:4]
+        return {
+            "summary": str(parsed.get("summary", "")).strip(),
+            "concepts": [str(item).strip() for item in parsed.get("concepts", []) if str(item).strip()][:8],
+            "proposals": proposals,
         }
 
 

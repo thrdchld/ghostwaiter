@@ -22,13 +22,19 @@ tags:
 # GhostWriter
 
 GhostWriter adalah web app penulisan personal berbasis FastAPI dan Hugging Face
-Inference Providers. Aplikasi menyimpan draft, chat, Brain profile, quick notes,
-references, dan snapshot secara terisolasi per workspace.
+Inference Providers. Aplikasi menyimpan draft, chat, Brain profile, references,
+dan snapshot secara terisolasi per workspace.
 
 ## Fitur
 
 - Chat dan writing generation dengan streaming
+- Markdown chat yang dirender aman dan rapi
+- Ringkasan serta konsep percakapan yang terhubung antar-chat dalam satu workspace
+- Akses workspace lain hanya ketika diminta eksplisit
+- Rename, arsip, restore, dan hapus permanen chat
+- Usulan pembelajaran chat yang dapat diedit, disetujui, atau ditolak
 - Model utama dan fallback melalui Hugging Face
+- Pencarian, pengujian, penambahan, dan pengurutan model Hugging Face
 - Draft autosave lokal dan server
 - PWA mobile-first dengan offline app shell
 - Style profile dan thinking profile dari revisi pengguna
@@ -95,11 +101,19 @@ frontend/
   assets/
   manifest.webmanifest
   service-worker.js
-data/
+  data/
   system/
   workspaces/
   queue/
   snapshots/
+```
+
+Brain workspace juga menyimpan:
+
+```text
+brain/conversation_memory.json
+brain/learning_proposals.json
+summary/workspace_summary.json
 ```
 
 Implementasi ini sengaja tidak memiliki terminal agent, command execution, atau

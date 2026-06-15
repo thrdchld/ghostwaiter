@@ -143,7 +143,12 @@ class JsonStore:
         self.ensure_json(root / "brain" / "thinking_profile.json", {"schema_version": 1, "patterns": []})
         self.ensure_json(root / "brain" / "memory.json", {"schema_version": 1, "items": []})
         self.ensure_json(root / "brain" / "rules.json", {"schema_version": 1, "max_rules": 100, "items": []})
-        self.ensure_json(root / "quick_notes.json", {"schema_version": 1, "items": []})
+        self.ensure_json(root / "brain" / "conversation_memory.json", {"schema_version": 1, "items": []})
+        self.ensure_json(root / "brain" / "learning_proposals.json", {"schema_version": 1, "items": []})
+        self.ensure_json(
+            root / "summary" / "workspace_summary.json",
+            {"schema_version": 1, "content": "", "updated_at": ""},
+        )
         return root
 
     def active_workspace(self) -> str:
@@ -215,6 +220,16 @@ class JsonStore:
         archive.mkdir(parents=True, exist_ok=True)
         shutil.move(path, archive / f"{entity_id}_{int(datetime.now().timestamp())}.json")
         self.enqueue_sync(f"{folder}:delete", workspace_id, {"id": entity_id})
+
+    def permanently_delete_entity(self, workspace_id: str, folder: str, entity_id: str) -> None:
+        path = self.workspace_path(workspace_id) / folder / f"{safe_id(entity_id)}.json"
+        if not path.exists():
+            raise FileNotFoundError(path)
+        backup = self.root / "archive" / "deleted" / folder.split("/")[0] / workspace_id
+        backup.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, backup / f"{entity_id}_{int(datetime.now().timestamp())}.json")
+        path.unlink()
+        self.enqueue_sync(f"{folder}:purge", workspace_id, {"id": entity_id})
 
     def enqueue_sync(self, item_type: str, workspace_id: str, payload: dict[str, Any]) -> None:
         queue_path = self.root / "queue" / "pending_sync.json"
