@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, Header, Query, Response, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -58,12 +58,12 @@ class WorkspaceRequest(BaseModel):
 
 
 class WorkspaceCreateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=60)
+    name: str = Field(min_length=1)
 
 
 class ChatRequest(BaseModel):
     workspace_id: str
-    message: str = Field(min_length=1, max_length=20000)
+    message: str = Field(min_length=1)
     chat_id: str | None = None
 
 
@@ -73,25 +73,25 @@ class ChatIdRequest(BaseModel):
 
 
 class ChatRenameRequest(ChatIdRequest):
-    title: str = Field(min_length=1, max_length=120)
+    title: str = Field(min_length=1)
 
 
 class LearningProposalRequest(BaseModel):
     workspace_id: str
     proposal_id: str
-    content: str | None = Field(default=None, min_length=1, max_length=2000)
+    content: str | None = Field(default=None, min_length=1)
 
 
 class DraftCreateRequest(BaseModel):
     workspace_id: str
-    title: str = Field(default="Untitled", max_length=160)
+    title: str = Field(default="Untitled")
 
 
 class DraftUpdateRequest(BaseModel):
     workspace_id: str
     draft_id: str
-    title: str | None = Field(default=None, max_length=160)
-    content: str | None = Field(default=None, max_length=500000)
+    title: str | None = Field(default=None)
+    content: str | None = Field(default=None)
     collections: list[str] | None = None
     tags: list[str] | None = None
 
@@ -103,34 +103,34 @@ class DraftIdRequest(BaseModel):
 
 class GenerateRequest(BaseModel):
     workspace_id: str
-    prompt: str = Field(min_length=1, max_length=30000)
+    prompt: str = Field(min_length=1)
     mode: Literal["chat", "write", "rewrite", "paraphrase"] = "write"
 
 
 class RevisionRequest(BaseModel):
     workspace_id: str
-    ai_output: str = Field(min_length=1, max_length=100000)
-    user_revision: str = Field(min_length=1, max_length=100000)
+    ai_output: str = Field(min_length=1)
+    user_revision: str = Field(min_length=1)
 
 
 class RawWritingRequest(BaseModel):
     workspace_id: str
-    content: str = Field(min_length=1, max_length=100000)
+    content: str = Field(min_length=1)
     type: Literal["user", "chat", "import"] = "user"
 
 
 class ReferenceSearchRequest(BaseModel):
     workspace_id: str
-    query: str = Field(min_length=2, max_length=300)
+    query: str = Field(min_length=2)
     auto_save: bool = True
 
 
 class ModelRequest(BaseModel):
-    model_id: str = Field(min_length=2, max_length=200)
+    model_id: str = Field(min_length=2)
 
 
 class ModelChainRequest(BaseModel):
-    models: list[str] = Field(min_length=1, max_length=12)
+    models: list[str] = Field(min_length=1)
 
 
 class SnapshotRestoreRequest(BaseModel):
@@ -1034,6 +1034,70 @@ def export_data() -> StreamingResponse:
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.post("/api/import", dependencies=[Depends(require_auth)])
+def import_data(file: UploadFile = File(...)) -> dict[str, str]:
+    if not file.filename.endswith(".zip"):
+        raise error("File harus berupa .zip")
+        
+    import tempfile
+    import shutil
+    import json
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        zip_path = tmp_path / "upload.zip"
+        with open(zip_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+            
+        try:
+            with zipfile.ZipFile(zip_path) as archive:
+                archive.extractall(tmp_path)
+        except zipfile.BadZipFile:
+            raise error("File zip rusak atau tidak valid")
+            
+        workspaces_dir = tmp_path / "workspaces"
+        if not workspaces_dir.exists() or not workspaces_dir.is_dir():
+            raise error("Tidak ditemukan folder workspaces dalam zip")
+            
+        existing_names = {ws["name"] for ws in store.list_workspaces()}
+        
+        for ws_dir in workspaces_dir.iterdir():
+            if not ws_dir.is_dir():
+                continue
+            data_file = ws_dir / "data.json"
+            if not data_file.exists():
+                continue
+                
+            try:
+                ws_data = json.loads(data_file.read_text("utf-8"))
+                original_name = ws_data.get("name", "Imported Workspace")
+            except Exception:
+                continue
+                
+            new_name = original_name
+            counter = 1
+            while new_name in existing_names:
+                new_name = f"{original_name} ({counter})"
+                counter += 1
+                
+            existing_names.add(new_name)
+            new_ws = store.create_workspace(new_name)
+            new_id = new_ws["id"]
+            dest_dir = store.workspace_path(new_id)
+            
+            for item in ws_dir.iterdir():
+                if item.is_dir():
+                    shutil.copytree(item, dest_dir / item.name, dirs_exist_ok=True)
+                elif item.name == "data.json":
+                    ws_data["id"] = new_id
+                    ws_data["name"] = new_name
+                    (dest_dir / "data.json").write_text(json.dumps(ws_data), "utf-8")
+                else:
+                    shutil.copy2(item, dest_dir / item.name)
+
+    return {"status": "success"}
 
 
 @app.get("/api/offline/cache/status")

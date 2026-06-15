@@ -25,11 +25,11 @@
 
   <div id="app" class="app-shell hidden">
     <header class="topbar">
-      <button id="workspace-button" class="workspace-button" type="button">
-        <span class="eyebrow">Workspace</span>
-        <strong id="workspace-name">Writing</strong>
-      </button>
+      <div class="app-branding" style="font-family: Georgia, serif; font-size: 20px; font-weight: bold; margin-left: 8px;">GhostWriter</div>
       <div class="status-cluster">
+        <button id="workspace-button" class="button compact" type="button" style="background:var(--paper);border:1px solid var(--line);color:var(--text);font-size:12px;font-weight:700;">
+          <strong id="workspace-name">Writing</strong>
+        </button>
         <button id="model-status" class="status-pill" type="button"><i></i><span>AI</span></button>
         <button id="sync-status" class="status-pill" type="button"><i></i><span>Local</span></button>
       </div>
@@ -39,7 +39,7 @@
       <section id="view-chat" class="view active" aria-label="Chat">
         <div class="section-heading">
           <div><span class="eyebrow">Conversation</span><h1 id="chat-title">Obrolan baru</h1></div>
-          <button id="chat-list-button" class="icon-button" type="button" aria-label="Riwayat chat">☷</button>
+          <button id="chat-list-button" class="icon-button" type="button" aria-label="Riwayat chat">🕒</button>
         </div>
         <div id="chat-messages" class="chat-messages">
           <div class="empty-state"><strong>Mulai dari sebuah pemikiran.</strong><span>Diskusikan ide, susun argumen, atau minta umpan balik.</span></div>
@@ -70,7 +70,10 @@
           <input id="draft-title" class="title-input" value="Untitled" aria-label="Judul draft">
           <textarea id="draft-content" class="document-editor" placeholder="Hasil AI dan tulisan Anda muncul di sini..."></textarea>
           <div class="editor-footer">
-            <span id="save-state">Belum disimpan</span>
+            <div>
+              <span id="save-state">Belum disimpan</span>
+              <span id="word-count" class="word-count">0 kata · 0 karakter</span>
+            </div>
             <div>
               <button id="copy-button" class="text-button" type="button">Copy</button>
               <button id="train-button" class="text-button accent" type="button">Train</button>
@@ -115,8 +118,9 @@
         <div class="settings-list">
           <button id="model-button" class="setting-row" type="button"><span><strong>Model AI</strong><small id="model-detail">Memuat...</small></span><b>›</b></button>
           <button id="manual-sync" class="setting-row" type="button"><span><strong>Sync GitHub</strong><small id="sync-detail">Belum dikonfigurasi</small></span><b>↻</b></button>
-          <button id="snapshot-button" class="setting-row" type="button"><span><strong>Buat snapshot</strong><small>Backup lokal sebelum perubahan besar</small></span><b>+</b></button>
-          <a class="setting-row" href="/api/export"><span><strong>Export data</strong><small>Unduh seluruh data JSON</small></span><b>↓</b></a>
+          <button id="import-button" class="setting-row" type="button"><span><strong>Import data offline</strong><small>Pulihkan data JSON dari perangkat</small></span><b>↑</b></button>
+          <a class="setting-row" href="/api/export" id="export-button"><span><strong>Export data offline</strong><small>Unduh seluruh data JSON ke perangkat</small></span><b>↓</b></a>
+          <input type="file" id="import-file" accept=".zip" class="hidden">
           <button id="install-button" class="setting-row hidden" type="button"><span><strong>Install aplikasi</strong><small>Tambahkan GhostWriter ke perangkat</small></span><b>+</b></button>
           <button id="logout-button" class="setting-row danger-row" type="button"><span><strong>Keluar</strong><small>Hapus sesi di perangkat ini</small></span><b>›</b></button>
         </div>
@@ -138,6 +142,25 @@
     <div class="sheet-heading"><h2 id="sheet-title">Menu</h2><button id="sheet-close" class="icon-button" type="button">×</button></div>
     <div id="sheet-content"></div>
   </aside>
+  <div id="confirm-modal" class="backdrop modal-overlay hidden">
+    <div class="dialog-card">
+      <p id="confirm-message"></p>
+      <div class="dialog-actions">
+        <button id="confirm-cancel" class="button compact" type="button">Batal</button>
+        <button id="confirm-ok" class="button primary compact" type="button">Ya</button>
+      </div>
+    </div>
+  </div>
+  <div id="prompt-modal" class="backdrop modal-overlay hidden">
+    <div class="dialog-card">
+      <p id="prompt-message"></p>
+      <input id="prompt-input" type="text" style="width: 100%; margin-bottom: 24px;" autocomplete="off">
+      <div class="dialog-actions">
+        <button id="prompt-cancel" class="button compact" type="button">Batal</button>
+        <button id="prompt-ok" class="button primary compact" type="button">Simpan</button>
+      </div>
+    </div>
+  </div>
   <div id="toast" class="toast hidden"></div>
   <script src="/assets/app.js?v=2" defer></script>
 </body>

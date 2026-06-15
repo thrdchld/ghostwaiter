@@ -40,12 +40,49 @@ async function jsonApi(path, options = {}) {
   return (await api(path, options)).json();
 }
 
-function toast(message) {
+function toast(message, type = "info") {
   const node = $("#toast");
   node.textContent = message;
-  node.classList.remove("hidden");
+  node.className = `toast ${type}`;
   clearTimeout(node.timer);
-  node.timer = setTimeout(() => node.classList.add("hidden"), 2800);
+  node.timer = setTimeout(() => node.className = `toast ${type} hidden`, 2800);
+}
+
+function showConfirm(message) {
+  return new Promise(resolve => {
+    const modal = $("#confirm-modal");
+    $("#confirm-message").textContent = message;
+    modal.classList.remove("hidden");
+    const cleanup = () => {
+      modal.classList.add("hidden");
+      $("#confirm-ok").removeEventListener("click", onOk);
+      $("#confirm-cancel").removeEventListener("click", onCancel);
+    };
+    const onOk = () => { cleanup(); resolve(true); };
+    const onCancel = () => { cleanup(); resolve(false); };
+    $("#confirm-ok").addEventListener("click", onOk);
+    $("#confirm-cancel").addEventListener("click", onCancel);
+  });
+}
+
+function showPrompt(message, defaultValue = "") {
+  return new Promise(resolve => {
+    const modal = $("#prompt-modal");
+    $("#prompt-message").textContent = message;
+    const input = $("#prompt-input");
+    input.value = defaultValue;
+    modal.classList.remove("hidden");
+    input.focus();
+    const cleanup = () => {
+      modal.classList.add("hidden");
+      $("#prompt-ok").removeEventListener("click", onOk);
+      $("#prompt-cancel").removeEventListener("click", onCancel);
+    };
+    const onOk = () => { cleanup(); resolve(input.value); };
+    const onCancel = () => { cleanup(); resolve(null); };
+    $("#prompt-ok").addEventListener("click", onOk);
+    $("#prompt-cancel").addEventListener("click", onCancel);
+  });
 }
 
 function escapeHtml(value = "") {
@@ -74,6 +111,7 @@ function inlineMarkdown(value) {
 }
 
 function renderMarkdown(source = "") {
+  source = source.replace(/<think>[\s\S]*?(<\/think>|$)/gi, '');
   const escaped = escapeHtml(source).replace(/\r\n?/g, "\n");
   const codeBlocks = [];
   const withoutCode = escaped.replace(/```([\w-]*)\n?([\s\S]*?)```/g, (_, language, code) => {
@@ -138,6 +176,7 @@ function closeSheet() {
 function showView(view) {
   $$(".view").forEach(node => node.classList.toggle("active", node.id === `view-${view}`));
   $$(".nav-item").forEach(node => node.classList.toggle("active", node.dataset.view === view));
+  localStorage.setItem("ghostwriter:activeView", view);
   if (view === "brain") loadBrain();
   if (view === "menu") Promise.all([loadModelStatus(), loadSyncStatus()]);
 }
@@ -149,6 +188,8 @@ async function initialize() {
     return;
   }
   $("#app").classList.remove("hidden");
+  const lastView = localStorage.getItem("ghostwriter:activeView") || "chat";
+  showView(lastView);
   await loadWorkspaces();
   await Promise.all([loadModelStatus(), loadSyncStatus()]);
   restoreLocalDraft();
@@ -191,15 +232,15 @@ async function switchWorkspace(id) {
   toast("Workspace diganti");
 }
 
-async function createWorkspace() {
-  const name = prompt("Nama workspace baru:");
+async function createWorkspace(customName = null) {
+  const name = customName || await showPrompt("Nama workspace baru:");
   if (!name?.trim()) return;
   try {
     const result = await jsonApi("/api/workspace/create", {method: "POST", body: {name: name.trim()}});
     state.workspaces.push(result.workspace);
     await switchWorkspace(result.workspace.id);
   } catch (error) {
-    toast(error.message);
+    toast(error.message, "error");
   }
 }
 
@@ -208,8 +249,11 @@ function appendMessage(role, content = "") {
   if (messages.querySelector(".empty-state")) messages.innerHTML = "";
   const node = document.createElement("div");
   node.className = `message ${role}`;
-  if (role === "assistant") node.innerHTML = renderMarkdown(content);
-  else node.textContent = content;
+  if (role === "assistant") {
+    node.innerHTML = `<div class="msg-content">${renderMarkdown(content)}</div><button class="chat-copy-btn" type="button" aria-label="Copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText.trim()); toast('Pesan disalin', 'success')">📋 Copy</button>`;
+  } else {
+    node.textContent = content;
+  }
   messages.appendChild(node);
   node.scrollIntoView({behavior: "smooth", block: "end"});
   return node;
@@ -239,11 +283,15 @@ async function sendChat(event) {
       const {value, done} = await reader.read();
       if (done) break;
       fullResponse += decoder.decode(value, {stream: true});
-      assistant.innerHTML = renderMarkdown(fullResponse);
+      assistant.querySelector(".msg-content").innerHTML = renderMarkdown(fullResponse);
       assistant.scrollIntoView({block: "end"});
     }
   } catch (error) {
-    assistant.innerHTML = renderMarkdown(`**Error:** ${error.message}`);
+    if (fullResponse.trim()) {
+      toast(`Koneksi terputus: ${error.message}`, "error");
+    } else {
+      assistant.querySelector(".msg-content").innerHTML = renderMarkdown(`**Error:** ${error.message}`);
+    }
   } finally {
     $("#chat-send").disabled = false;
     setTimeout(async () => {
@@ -299,7 +347,7 @@ async function renderChatHistory(archived) {
 }
 
 async function renameChat(id, oldTitle) {
-  const title = prompt("Nama chat:", oldTitle);
+  const title = await showPrompt("Nama chat:", oldTitle);
   if (!title?.trim()) return;
   await jsonApi("/api/chat/rename", {method: "POST", body: {workspace_id: state.workspace, chat_id: id, title: title.trim()}});
   if (state.currentChat === id) $("#chat-title").textContent = title.trim();
@@ -307,7 +355,7 @@ async function renameChat(id, oldTitle) {
 }
 
 async function archiveChat(id) {
-  if (!confirm("Pindahkan chat ini ke arsip?")) return;
+  if (!(await showConfirm("Pindahkan chat ini ke arsip?"))) return;
   await jsonApi("/api/chat/archive", {method: "POST", body: {workspace_id: state.workspace, chat_id: id}});
   if (state.currentChat === id) resetChat();
   await renderChatHistory(false);
@@ -320,7 +368,7 @@ async function restoreChat(id) {
 }
 
 async function purgeChat(id) {
-  if (!confirm("Hapus permanen chat ini? Backup internal tetap dibuat, tetapi tidak tersedia dari UI.")) return;
+  if (!(await showConfirm("Hapus permanen chat ini? Backup internal tetap dibuat, tetapi tidak tersedia dari UI."))) return;
   await jsonApi("/api/chat/delete-permanent", {method: "POST", body: {workspace_id: state.workspace, chat_id: id}});
   await renderChatHistory(true);
 }
@@ -357,8 +405,10 @@ async function generateWriting() {
     }
     state.originalAiText = $("#draft-content").value;
     scheduleDraftSave();
+    saveUndoState();
+    updateWordCount();
   } catch (error) {
-    toast(error.message);
+    toast(error.message, "error");
   } finally {
     button.disabled = false;
     button.textContent = "Generate";
@@ -396,6 +446,11 @@ function restoreLocalDraft() {
     $("#write-prompt").value = draft.prompt || "";
     $("#save-state").textContent = "Dipulihkan dari perangkat";
   } catch (_) {}
+  
+  undoStack.length = 0;
+  undoIndex = -1;
+  saveUndoState();
+  updateWordCount();
 }
 
 function scheduleDraftSave() {
@@ -709,13 +764,14 @@ async function moveModel(chain, index, delta) {
 }
 
 async function manualSync() {
+  if (!(await showConfirm("Sync ke GitHub sekarang?"))) return;
   try {
     $("#manual-sync").disabled = true;
     await jsonApi("/api/sync/run", {method: "POST"});
-    toast("Sync selesai");
+    toast("Sync selesai", "success");
     await loadSyncStatus();
   } catch (error) {
-    toast(error.message);
+    toast(error.message, "error");
   } finally {
     $("#manual-sync").disabled = false;
   }
@@ -740,23 +796,63 @@ function bindEvents() {
   $("#generate-button").onclick = generateWriting;
   $("#draft-list-button").onclick = showDraftList;
   $("#draft-title").addEventListener("input", scheduleDraftSave);
-  $("#draft-content").addEventListener("input", scheduleDraftSave);
+  $("#draft-content").addEventListener("input", () => {
+    scheduleDraftSave();
+    updateWordCount();
+    clearTimeout(state.undoTimer);
+    state.undoTimer = setTimeout(saveUndoState, 1000);
+  });
+  $("#draft-content").addEventListener("keydown", event => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "z") {
+      event.preventDefault();
+      if (event.shiftKey) redoDraft();
+      else undoDraft();
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key === "y") {
+      event.preventDefault();
+      redoDraft();
+    }
+  });
   $("#write-prompt").addEventListener("input", saveDraftLocally);
   $("#copy-button").onclick = async () => { await navigator.clipboard.writeText($("#draft-content").value); toast("Disalin"); };
   $("#train-button").onclick = trainRevision;
   $("#refresh-brain").onclick = loadBrain;
   $$(".chip").forEach(chip => chip.onclick = () => {
+    $$(".chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
     state.brainTab = chip.dataset.brainTab;
-    $$(".chip").forEach(node => node.classList.toggle("active", node === chip));
     renderBrainTab();
     if (state.brainTab === "references") loadReferences();
     if (state.brainTab === "proposals") loadProposals();
   });
+  
+  $("#import-button").onclick = () => $("#import-file").click();
+  $("#import-file").onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    toast("Mengimpor data...");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const headers = {};
+      const token = localStorage.getItem("ghostwriter:token");
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
+      const response = await fetch("/api/import", { method: "POST", headers, body: formData });
+      if (!response.ok) throw await response.json().catch(() => ({message: `HTTP ${response.status}`}));
+      toast("Import berhasil! Memuat ulang...", "success");
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
+      toast("Gagal mengimpor file: " + err.message, "error");
+    }
+    e.target.value = "";
+  };
+
   $("#learn-raw-button").onclick = learnRawWriting;
   $("#reference-button").onclick = searchReferences;
   $("#model-button").onclick = showModelSheet;
   $("#model-status").onclick = showModelSheet;
-  $("#sync-status").onclick = loadSyncStatus;
+  $("#sync-status").onclick = manualSync;
   $("#manual-sync").onclick = manualSync;
   $("#snapshot-button").onclick = createSnapshot;
   $("#logout-button").onclick = async () => {
@@ -796,6 +892,43 @@ function bindEvents() {
     $("#install-button").classList.add("hidden");
   };
   window.addEventListener("online", saveDraftToServer);
+}
+
+const undoStack = [];
+let undoIndex = -1;
+
+function saveUndoState() {
+  const content = $("#draft-content").value;
+  if (undoIndex >= 0 && undoStack[undoIndex] === content) return;
+  undoStack.length = undoIndex + 1;
+  undoStack.push(content);
+  undoIndex++;
+  if (undoStack.length > 50) { undoStack.shift(); undoIndex--; }
+}
+
+function undoDraft() {
+  if (undoIndex > 0) {
+    undoIndex--;
+    $("#draft-content").value = undoStack[undoIndex];
+    scheduleDraftSave();
+    updateWordCount();
+  }
+}
+
+function redoDraft() {
+  if (undoIndex < undoStack.length - 1) {
+    undoIndex++;
+    $("#draft-content").value = undoStack[undoIndex];
+    scheduleDraftSave();
+    updateWordCount();
+  }
+}
+
+function updateWordCount() {
+  const text = $("#draft-content").value || "";
+  const chars = text.length;
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  $("#word-count").textContent = `${words} kata · ${chars} karakter`;
 }
 
 bindEvents();
