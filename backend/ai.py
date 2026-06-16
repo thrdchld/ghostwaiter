@@ -4,7 +4,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
-from huggingface_hub import AsyncInferenceClient
+import httpx
 
 from .config import settings
 from .storage import store
@@ -16,74 +16,75 @@ class AIUnavailable(RuntimeError):
 
 class AIService:
     def __init__(self) -> None:
-        self.active_model = settings.default_model
-        self.last_error = ""
+        pass
 
-    @property
-    def models(self) -> tuple[str, ...]:
-        models_file = store.read_json(store.root / "system" / "models.json")
-        return tuple(
-            dict.fromkeys(
-                [models_file.get("default_model", settings.default_model)]
-                + models_file.get("fallback_models", list(settings.fallback_models))
-            )
-        )
-
-    def client(self) -> AsyncInferenceClient:
-        if not settings.hf_token:
-            raise AIUnavailable("HF_TOKEN belum dikonfigurasi di Settings Hugging Face Space")
-        return AsyncInferenceClient(
-            api_key=settings.hf_token,
-            provider=settings.inference_provider,
-            timeout=120,
-        )
-
-    async def stream(self, messages: list[dict[str, str]], max_tokens: int = 900) -> AsyncIterator[str]:
-        errors: list[str] = []
-        for model in self.models:
+    async def stream(self, api_key: str, model: str, messages: list[dict[str, str]], max_tokens: int = 900) -> AsyncIterator[str]:
+        if not api_key:
+            raise AIUnavailable("OpenRouter API Key is missing. Please configure it in Settings.")
+        if not model:
+            raise AIUnavailable("OpenRouter Model is missing. Please select a model in Settings.")
+            
+        async with httpx.AsyncClient() as client:
             try:
-                client = self.client()
-                stream = await client.chat_completion(
-                    model=model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=0.7,
-                    stream=True,
-                )
-                self.active_model = model
-                async for chunk in stream:
-                    text = chunk.choices[0].delta.content or ""
-                    if text:
-                        yield text
-                self.last_error = ""
-                return
+                async with client.stream(
+                    "POST",
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "max_tokens": max_tokens,
+                        "temperature": 0.7,
+                        "stream": True,
+                    },
+                    timeout=120.0
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if line.startswith("data: "):
+                            data_str = line[6:]
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                data = json.loads(data_str)
+                                delta = data.get("choices", [{}])[0].get("delta", {})
+                                text = delta.get("content", "")
+                                if text:
+                                    yield text
+                            except json.JSONDecodeError:
+                                continue
             except Exception as exc:
-                errors.append(f"{model}: {exc}")
-        self.last_error = " | ".join(errors)
-        raise AIUnavailable("Semua model inference gagal. Periksa token, provider, dan kuota.")
+                raise AIUnavailable(f"Inference failed: {exc}")
 
     async def complete(
         self,
+        api_key: str,
+        model: str,
         messages: list[dict[str, str]],
         max_tokens: int = 500,
         temperature: float = 0.3,
     ) -> str:
-        errors: list[str] = []
-        for model in self.models:
+        if not api_key or not model:
+            raise AIUnavailable("OpenRouter API Key and Model are required.")
+        async with httpx.AsyncClient() as client:
             try:
-                response = await self.client().chat_completion(
-                    model=model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
+                response = await client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "max_tokens": max_tokens,
+                        "temperature": temperature,
+                    },
+                    timeout=120.0
                 )
-                self.active_model = model
-                self.last_error = ""
-                return response.choices[0].message.content or ""
+                response.raise_for_status()
+                data = response.json()
+                return data.get("choices", [{}])[0].get("message", {}).get("content", "")
             except Exception as exc:
-                errors.append(f"{model}: {exc}")
-        self.last_error = " | ".join(errors)
-        raise AIUnavailable("Semua model inference gagal. Periksa token, provider, dan kuota.")
+                raise AIUnavailable(f"Inference failed: {exc}")
 
     def context(self, workspace_id: str) -> str:
         brain = store.workspace_path(workspace_id) / "brain"
@@ -96,31 +97,33 @@ class AIService:
             return str(item.get("content", "")) if isinstance(item, dict) else str(item)
 
         if style:
-            sections.append("Gaya pengguna:\n" + "\n".join(f"- {item}" for item in style[-12:]))
+            sections.append("User style:\n" + "\n".join(f"- {item}" for item in style[-12:]))
         if thinking:
-            sections.append("Pola berpikir pengguna:\n" + "\n".join(f"- {item}" for item in thinking[-8:]))
+            sections.append("User thinking patterns:\n" + "\n".join(f"- {item}" for item in thinking[-8:]))
         if rules:
             sections.append(
-                "Aturan eksplisit:\n"
+                "Explicit rules:\n"
                 + "\n".join(f"- {content(item)}" for item in rules[-12:])
             )
         if memory:
             sections.append(
-                "Memori relevan:\n"
+                "Relevant memory:\n"
                 + "\n".join(f"- {content(item)}" for item in memory[-10:])
             )
         return "\n\n".join(sections)
 
-    async def learn_revision(self, ai_output: str, user_revision: str) -> dict[str, list[str]]:
+    async def learn_revision(self, api_key: str, model: str, ai_output: str, user_revision: str) -> dict[str, list[str]]:
         prompt = (
-            "Bandingkan keluaran AI dan revisi pengguna. Keluarkan JSON valid saja dengan bentuk "
+            "Compare the AI output with the user's revision. Output only valid JSON in the format "
             '{"style_rules":["..."],"thinking_patterns":["..."]}. '
-            "Maksimal 3 item per daftar, konkret, singkat, dan jangan membahas isi/topik."
+            "Maximum 3 items per list, concrete, concise, and do not discuss the content/topic itself."
         )
         result = await self.complete(
+            api_key,
+            model,
             [
                 {"role": "system", "content": prompt},
-                {"role": "user", "content": f"KELUARAN AI:\n{ai_output}\n\nREVISI PENGGUNA:\n{user_revision}"},
+                {"role": "user", "content": f"AI OUTPUT:\n{ai_output}\n\nUSER REVISION:\n{user_revision}"},
             ],
             max_tokens=400,
             temperature=0.2,
@@ -137,23 +140,25 @@ class AIService:
             ][:3],
         }
 
-    async def analyze_chat(self, messages: list[dict[str, str]], previous_summary: str = "") -> dict[str, Any]:
+    async def analyze_chat(self, api_key: str, model: str, messages: list[dict[str, str]], previous_summary: str = "") -> dict[str, Any]:
         transcript = "\n".join(
             f"{item['role'].upper()}: {item['content']}" for item in messages[-12:]
         )
         prompt = (
-            "Analisis percakapan untuk kesinambungan dan pembelajaran personal. Balas JSON valid saja: "
-            '{"summary":"ringkasan konsep dan keputusan","concepts":["konsep penting"],'
-            '"proposals":[{"type":"style|thinking|memory|rule","content":"usulan"}]}. '
-            "Summary dan concepts harus faktual. Proposal hanya untuk preferensi atau fakta pengguna yang cukup jelas, "
-            "maksimal 4, tanpa duplikat dan jangan menjadikan pertanyaan biasa sebagai preferensi permanen."
+            "Analyze the conversation for continuity and personalization. Respond with valid JSON only: "
+            '{"summary":"summary of concepts and decisions","concepts":["important concept"],'
+            '"proposals":[{"type":"style|thinking|memory|rule","content":"proposal"}]}. '
+            "Summary and concepts must be factual. Proposals are for user preferences or explicit facts only, "
+            "max 4, no duplicates, and do not treat regular questions as permanent preferences."
         )
         result = await self.complete(
+            api_key,
+            model,
             [
                 {"role": "system", "content": prompt},
                 {
                     "role": "user",
-                    "content": f"RINGKASAN SEBELUMNYA:\n{previous_summary}\n\nPERCAKAPAN:\n{transcript}",
+                    "content": f"PREVIOUS SUMMARY:\n{previous_summary}\n\nCONVERSATION:\n{transcript}",
                 },
             ],
             max_tokens=700,

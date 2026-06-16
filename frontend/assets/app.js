@@ -267,7 +267,7 @@ function showWorkspaceSheet() {
       <b>${item.id === state.workspace ? "✓" : ""}</b>
     </button>`).join("");
   openSheet("Pilih workspace", `${items}
-    <button id="create-workspace" class="button primary" style="width:100%;margin-top:16px" type="button">Workspace baru</button>`);
+    <button id="create-workspace" class="button primary" style="width:100%;margin-top:16px" type="button">New Workspace</button>`);
   $$(".workspace-option").forEach(button => button.onclick = () => switchWorkspace(button.dataset.id));
   $("#create-workspace").onclick = createWorkspace;
 }
@@ -287,7 +287,7 @@ async function switchWorkspace(id) {
 }
 
 async function createWorkspace(customName = null) {
-  const name = customName || await showPrompt("Nama workspace baru:");
+  const name = customName || await showPrompt("New workspace name:");
   if (!name?.trim()) return;
   try {
     const result = await jsonApi("/api/workspace/create", {method: "POST", body: {name: name.trim()}});
@@ -330,7 +330,7 @@ async function sendChat(event) {
       body: {workspace_id: state.workspace, chat_id: state.currentChat, message},
     });
     state.currentChat = response.headers.get("X-Chat-Id");
-    if ($("#chat-title").textContent === "Obrolan baru") $("#chat-title").textContent = message.slice(0, 60);
+    if ($("#chat-title").textContent === "New Chat") $("#chat-title").textContent = message.slice(0, 60);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     while (true) {
@@ -366,16 +366,16 @@ async function sendChat(event) {
 
 function resetChat() {
   state.currentChat = null;
-  $("#chat-title").textContent = "Obrolan baru";
+  $("#chat-title").textContent = "New Chat";
   $("#chat-messages").innerHTML = `<div class="empty-state"><strong>Mulai dari sebuah pemikiran.</strong><span>Diskusikan ide, susun argumen, atau minta umpan balik.</span></div>`;
 }
 
 async function showChatList() {
   try {
-    openSheet("Riwayat chat", `<div class="sheet-tabs"><button id="active-chat-tab" class="chip active">Aktif</button><button id="archive-chat-tab" class="chip">Arsip</button></div><div id="chat-list-content"></div><button id="new-chat" class="button primary" style="width:100%;margin-top:16px">Obrolan baru</button>`);
+    openSheet("Chat history", `<div class="sheet-tabs"><button id="active-chat-tab" class="chip active">Active</button><button id="archive-chat-tab" class="chip">Archive</button></div><div id="chat-list-content"></div>`);
     $("#active-chat-tab").onclick = () => renderChatHistory(false);
     $("#archive-chat-tab").onclick = () => renderChatHistory(true);
-    $("#new-chat").onclick = () => { resetChat(); closeSheet(); };
+    
     await renderChatHistory(false);
   } catch (error) {
     toast(error.message);
@@ -394,9 +394,9 @@ async function renderChatHistory(archived) {
       <div class="row-actions">
         ${archived
           ? `<button class="mini-button restore-chat" data-id="${escapeHtml(item.id)}">Restore</button><button class="mini-button danger purge-chat" data-id="${escapeHtml(item.id)}">Hapus</button>`
-          : `<button class="mini-button rename-chat" data-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title)}">Edit</button><button class="mini-button danger archive-chat" data-id="${escapeHtml(item.id)}">Arsip</button>`}
+          : `<button class="mini-button rename-chat" data-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title)}">Edit</button><button class="mini-button danger archive-chat" data-id="${escapeHtml(item.id)}">Archive</button>`}
       </div>
-    </div>`).join("") || `<p class="empty-state" style="min-height:180px">${archived ? "Arsip kosong." : "Belum ada riwayat."}</p>`;
+    </div>`).join("") || `<p class="empty-state" style="min-height:180px">${archived ? "Archive is empty." : "No history yet."}</p>`;
   $$(".chat-option").forEach(button => button.onclick = () => loadChat(button.dataset.id));
   $$(".rename-chat").forEach(button => button.onclick = () => renameChat(button.dataset.id, button.dataset.title));
   $$(".archive-chat").forEach(button => button.onclick = () => archiveChat(button.dataset.id));
@@ -413,7 +413,7 @@ async function renameChat(id, oldTitle) {
 }
 
 async function archiveChat(id) {
-  if (!(await showConfirm("Pindahkan chat ini ke arsip?"))) return;
+  if (!(await showConfirm("Archive this chat?"))) return;
   await jsonApi("/api/chat/archive", {method: "POST", body: {workspace_id: state.workspace, chat_id: id}});
   if (state.currentChat === id) resetChat();
   await renderChatHistory(false);
@@ -445,7 +445,7 @@ async function generateWriting() {
   if (!prompt) return toast("Write an instruction first");
   const button = $("#generate-button");
   button.disabled = true;
-  button.textContent = "Menulis...";
+  button.textContent = "Generating...";
   $("#draft-content").value = "";
   state.originalAiText = "";
   try {
@@ -616,7 +616,7 @@ function renderBrainTab() {
   if (state.brainTab === "style") items = state.brain.style_profile.rules;
   if (state.brainTab === "thinking") items = state.brain.thinking_profile.patterns;
   $("#brain-list").innerHTML = items.map(item => `<article class="insight">${escapeHtml(item)}</article>`).join("")
-    || `<div class="empty-state" style="min-height:240px"><strong>Belum ada pola.</strong><span>Train revisi atau ajarkan contoh tulisan Anda.</span></div>`;
+    || `<div class="empty-state" style="min-height:240px"><strong>No patterns yet.</strong><span>Train revisions or provide writing samples.</span></div>`;
 }
 
 async function loadProposals() {
@@ -630,7 +630,7 @@ async function loadProposals() {
           <button class="button mini-button reject-proposal" type="button">Tolak</button>
           <button class="button primary approve-proposal" type="button">Setujui</button>
         </div>
-      </article>`).join("") || `<div class="empty-state" style="min-height:220px"><strong>Tidak ada usulan.</strong><span>Usulan baru muncul setelah sistem menganalisis percakapan.</span></div>`;
+      </article>`).join("") || `<div class="empty-state" style="min-height:220px"><strong>No proposals.</strong><span>New proposals will appear after the system analyzes conversations.</span></div>`;
     $$(".approve-proposal").forEach(button => button.onclick = () => decideProposal(button, true));
     $$(".reject-proposal").forEach(button => button.onclick = () => decideProposal(button, false));
   } catch (error) {
@@ -672,7 +672,7 @@ async function learnRawWriting() {
     toast(error.message);
   } finally {
     button.disabled = false;
-    button.textContent = "Analisis tulisan";
+    button.textContent = "Analyze writing";
   }
 }
 
@@ -693,7 +693,7 @@ async function compareRevision() {
       <article class="proposal-card">
         <label>${p.type}</label>
         <textarea class="compare-proposal-content" data-type="${p.type === 'Style Rule' ? 'style' : 'thinking'}">${escapeHtml(p.content)}</textarea>
-      </article>`).join("") || "<p class='empty-state' style='min-height:100px'>Tidak ada perbedaan signifikan.</p>";
+      </article>`).join("") || "<p class='empty-state' style='min-height:100px'>No significant differences.</p>";
     $("#compare-results").classList.remove("hidden");
   } catch (error) {
     toast(error.message);
@@ -775,14 +775,14 @@ async function loadSyncStatus() {
     const pill = $("#sync-status");
     pill.className = `status-pill ${data.queue_size ? "warn" : "ok"}`;
     pill.querySelector("span").textContent = data.queue_size ? `${data.queue_size} pending` : "Synced";
-    $("#sync-detail").textContent = data.configured ? `${data.queue_size} perubahan menunggu` : "Secret GitHub belum dikonfigurasi";
+    $("#sync-detail").textContent = data.configured ? `${data.queue_size} pending changes` : "GitHub secret not configured";
   } catch (_) {}
 }
 
 
 
 async function manualSync() {
-  if (!(await showConfirm("Sync ke GitHub sekarang?"))) return;
+  if (!(await showConfirm("Sync to GitHub now?"))) return;
   try {
     $("#manual-sync").disabled = true;
     await jsonApi("/api/sync/run", {method: "POST"});
@@ -798,6 +798,8 @@ async function manualSync() {
 
 
 function bindEvents() {
+  if ($("#model-status")) $("#model-status").onclick = () => toast(`OpenRouter: ${localStorage.getItem("ghostwriter:openrouter_model") || "None"}`);
+  if ($("#new-chat-button")) $("#new-chat-button").onclick = () => { resetChat(); closeSheet(); };
   document.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.shiftKey) {
       const el = e.target;
@@ -852,13 +854,13 @@ function bindEvents() {
     let filtered = allModels.filter(m => m.id.toLowerCase().includes(query) || m.name.toLowerCase().includes(query));
     
     if (currentTab === "free") {
-      filtered = filtered.filter(m => parseFloat(m.pricing?.prompt || -1) === 0 && parseFloat(m.pricing?.completion || -1) === 0);
+      filtered = filtered.filter(m => m.pricing && parseFloat(m.pricing.prompt) === 0 && parseFloat(m.pricing.completion) === 0);
     } else if (currentTab === "paid") {
-      filtered = filtered.filter(m => parseFloat(m.pricing?.prompt || 0) > 0 || parseFloat(m.pricing?.completion || 0) > 0);
+      filtered = filtered.filter(m => m.pricing && (parseFloat(m.pricing.prompt) > 0 || parseFloat(m.pricing.completion) > 0));
     }
 
     filtered.forEach(model => {
-      const isFree = parseFloat(model.pricing?.prompt || -1) === 0 && parseFloat(model.pricing?.completion || -1) === 0;
+      const isFree = model.pricing && parseFloat(model.pricing.prompt) === 0 && parseFloat(model.pricing.completion) === 0;
       const el = document.createElement("div");
       el.className = "model-result";
       el.style.cursor = "pointer";

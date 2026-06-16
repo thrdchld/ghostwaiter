@@ -389,10 +389,10 @@ def permanently_delete_chat(req: ChatIdRequest) -> dict[str, str]:
     return {"status": "success"}
 
 
-async def _analyze_chat_background(workspace: str, chat_id: str) -> None:
+async def _analyze_chat_background(workspace: str, chat_id: str, api_key: str, model: str) -> None:
     try:
         chat = store.get_entity(workspace, "chats", chat_id)
-        analysis = await ai_service.analyze_chat(chat.get("messages", []), chat.get("summary", ""))
+        analysis = await ai_service.analyze_chat(api_key, model, chat.get("messages", []), chat.get("summary", ""))
         chat["summary"] = analysis["summary"]
         chat["updated_at"] = now_iso()
         store.save_entity(workspace, "chats", chat)
@@ -473,7 +473,7 @@ async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str):
     )
     chunks: list[str] = []
     try:
-        async for text in ai_service.stream(messages):
+        async for text in ai_service.stream(api_key, model, messages):
             chunks.append(text)
             yield text
     except AIUnavailable as exc:
@@ -487,7 +487,7 @@ async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str):
             chat["title"] = user_message[:60]
         store.save_entity(workspace, "chats", chat)
         if answer:
-            asyncio.create_task(_analyze_chat_background(workspace, chat["id"]))
+            asyncio.create_task(_analyze_chat_background(workspace, chat["id"], auth[0], auth[1]))
 
 
 @app.post("/api/chat/send", dependencies=[Depends(require_auth)])
@@ -587,27 +587,27 @@ async def _generate_stream(workspace: str, prompt: str, mode: str):
         {"role": "user", "content": prompt},
     ]
     try:
-        async for text in ai_service.stream(messages):
+        async for text in ai_service.stream(api_key, model, messages):
             yield text
     except AIUnavailable as exc:
         yield f"[Error: {exc}]"
 
 
 @app.post("/api/ai/generate", dependencies=[Depends(require_auth)])
-def generate(req: GenerateRequest) -> StreamingResponse:
+def generate(req: GenerateRequest, auth: tuple[str, str] = Depends(get_or_auth)) -> StreamingResponse:
     workspace = workspace_id(req.workspace_id)
     return StreamingResponse(
-        _generate_stream(workspace, req.prompt, req.mode),
+        _generate_stream(workspace, req.prompt, req.mode, auth[0], auth[1]),
         media_type="text/plain; charset=utf-8",
         headers={"Cache-Control": "no-cache"},
     )
 
 
 @app.post("/api/brain/learn/revision", dependencies=[Depends(require_auth)])
-async def learn_revision(req: RevisionRequest) -> dict[str, Any]:
+async def learn_revision(req: RevisionRequest, auth: tuple[str, str] = Depends(get_or_auth)) -> dict[str, Any]:
     workspace = workspace_id(req.workspace_id)
     try:
-        analysis = await ai_service.learn_revision(req.ai_output, req.user_revision)
+        analysis = await ai_service.learn_revision(auth[0], auth[1], req.ai_output, req.user_revision)
     except AIUnavailable as exc:
         raise error(str(exc), 503) from exc
     timestamp = now_iso()
@@ -635,9 +635,9 @@ async def learn_revision(req: RevisionRequest) -> dict[str, Any]:
 
 
 @app.post("/api/brain/compare-revision", dependencies=[Depends(require_auth)])
-async def compare_revision(req: RevisionRequest) -> dict[str, Any]:
+async def compare_revision(req: RevisionRequest, auth: tuple[str, str] = Depends(get_or_auth)) -> dict[str, Any]:
     try:
-        analysis = await ai_service.learn_revision(req.ai_output, req.user_revision)
+        analysis = await ai_service.learn_revision(auth[0], auth[1], req.ai_output, req.user_revision)
     except AIUnavailable as exc:
         raise error(str(exc), 503) from exc
     return {"status": "analyzed", "analysis": analysis}
@@ -659,7 +659,7 @@ async def commit_revision(req: CommitRevisionRequest) -> dict[str, Any]:
 
 
 @app.post("/api/brain/learn/raw-writing", dependencies=[Depends(require_auth)])
-async def learn_raw(req: RawWritingRequest) -> dict[str, Any]:
+async def learn_raw(req: RawWritingRequest, auth: tuple[str, str] = Depends(get_or_auth)) -> dict[str, Any]:
     workspace = workspace_id(req.workspace_id)
     prompt = (
         "Analisis gaya tulisan berikut. Balas satu aturan gaya yang konkret, singkat, "
@@ -668,6 +668,7 @@ async def learn_raw(req: RawWritingRequest) -> dict[str, Any]:
     try:
         rule = (
             await ai_service.complete(
+                auth[0], auth[1],
                 [{"role": "system", "content": prompt}, {"role": "user", "content": req.content}],
                 max_tokens=160,
                 temperature=0.2,
@@ -762,117 +763,6 @@ def get_reference(
         return store.get_entity(workspace_id(workspace_id_query), "references", reference_id)
     except (FileNotFoundError, ValueError) as exc:
         raise error("Referensi tidak ditemukan", 404) from exc
-
-
-@app.get("/api/model/status", dependencies=[Depends(require_auth)])
-def model_status() -> dict[str, Any]:
-    models_file = store.read_json(store.root / "system" / "models.json")
-    return {
-        "active_model": ai_service.active_model,
-        "default_model": models_file.get("default_model", settings.default_model),
-        "fallback_models": models_file.get("fallback_models", []),
-        "fallback_chain": list(ai_service.models),
-        "configured": bool(settings.hf_token),
-        "provider": settings.inference_provider,
-        "last_error": ai_service.last_error,
-    }
-
-
-@app.post("/api/model/set-default", dependencies=[Depends(require_auth)])
-def set_default_model(req: ModelRequest) -> dict[str, str]:
-    path = store.root / "system" / "models.json"
-    data = store.read_json(path)
-    previous = data.get("default_model")
-    data["default_model"] = req.model_id
-    fallbacks = [item for item in data.get("fallback_models", []) if item != req.model_id]
-    if previous and previous != req.model_id:
-        fallbacks.insert(0, previous)
-    data["fallback_models"] = list(dict.fromkeys(fallbacks))[:11]
-    store.write_json(path, data)
-    ai_service.active_model = req.model_id
-    return {"status": "success", "model_id": req.model_id}
-
-
-@app.post("/api/model/add-fallback", dependencies=[Depends(require_auth)])
-def add_fallback_model(req: ModelRequest) -> dict[str, Any]:
-    path = store.root / "system" / "models.json"
-    data = store.read_json(path)
-    if req.model_id != data.get("default_model"):
-        data["fallback_models"] = list(
-            dict.fromkeys(data.get("fallback_models", []) + [req.model_id])
-        )[:11]
-    store.write_json(path, data)
-    return {"status": "success", "fallback_models": data["fallback_models"]}
-
-
-@app.post("/api/model/remove", dependencies=[Depends(require_auth)])
-def remove_model(req: ModelRequest) -> dict[str, Any]:
-    path = store.root / "system" / "models.json"
-    data = store.read_json(path)
-    if req.model_id == data.get("default_model"):
-        raise error("Model default tidak dapat dihapus. Pilih default lain terlebih dahulu.")
-    data["fallback_models"] = [
-        item for item in data.get("fallback_models", []) if item != req.model_id
-    ]
-    store.write_json(path, data)
-    return {"status": "success", "fallback_models": data["fallback_models"]}
-
-
-@app.post("/api/model/reorder", dependencies=[Depends(require_auth)])
-def reorder_models(req: ModelChainRequest) -> dict[str, Any]:
-    unique = list(dict.fromkeys(item.strip() for item in req.models if item.strip()))
-    path = store.root / "system" / "models.json"
-    data = store.read_json(path)
-    data["default_model"] = unique[0]
-    data["fallback_models"] = unique[1:]
-    store.write_json(path, data)
-    return {"status": "success", "models": unique}
-
-
-@app.post("/api/model/test", dependencies=[Depends(require_auth)])
-async def test_model(req: ModelRequest) -> dict[str, Any]:
-    try:
-        response = await ai_service.client().chat_completion(
-            model=req.model_id,
-            messages=[{"role": "user", "content": "Balas hanya: OK"}],
-            max_tokens=8,
-            temperature=0,
-        )
-        return {
-            "status": "success",
-            "model_id": req.model_id,
-            "response": response.choices[0].message.content or "",
-        }
-    except Exception as exc:
-        raise error(f"Model tidak dapat digunakan: {exc}", 503) from exc
-
-
-@app.get("/api/model/search", dependencies=[Depends(require_auth)])
-async def search_models(query: str = Query(min_length=2, max_length=100)) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.get(
-            "https://huggingface.co/api/models",
-            params={"search": query, "pipeline_tag": "text-generation", "sort": "downloads", "direction": -1, "limit": 20},
-        )
-        response.raise_for_status()
-    return {
-        "items": [
-            {
-                "id": item.get("id"),
-                "downloads": item.get("downloads", 0),
-                "likes": item.get("likes", 0),
-                "private": item.get("private", False),
-                "gated": item.get("gated", False),
-                "pipeline_tag": item.get("pipeline_tag", ""),
-                "inference": item.get("inference"),
-            }
-            for item in response.json()
-        ]
-    }
-
-
-def _proposal_file(workspace: str) -> Path:
-    return store.workspace_path(workspace) / "brain" / "learning_proposals.json"
 
 
 @app.get("/api/brain/proposals", dependencies=[Depends(require_auth)])
