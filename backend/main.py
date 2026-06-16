@@ -489,7 +489,7 @@ async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str, 
     chat["messages"].append({"role": "user", "content": user_message, "timestamp": now_iso()})
     app_context, accessed_workspaces = build_chat_context(workspace, user_message)
     chat["accessed_workspaces"] = accessed_workspaces
-    messages = [{"role": "system", "content": _brain_system_prompt(workspace, "chat", app_context)}]
+    messages = [{"role": "system", "content": _brain_system_prompt(workspace, "chat", app_context, model)}]
     if chat.get("summary"):
         messages.append(
             {"role": "system", "content": f"Previous conversation summary:\n{chat['summary']}"}
@@ -627,7 +627,7 @@ def delete_draft(req: DraftIdRequest) -> dict[str, str]:
 
 async def _generate_stream(workspace: str, prompt: str, mode: str, api_key: str, model: str, provider: str = "openrouter"):
     messages = [
-        {"role": "system", "content": _brain_system_prompt(workspace, mode)},
+        {"role": "system", "content": _brain_system_prompt(workspace, mode, "", model)},
         {"role": "user", "content": prompt},
     ]
     try:
@@ -971,6 +971,60 @@ async def _github_sync() -> tuple[bool, str]:
     store.write_json(system_path, system)
     return True, ""
 
+
+class BulkProposalRequest(BaseModel):
+    workspace_id: str | None = None
+    action: str
+    proposal_ids: list[str]
+
+@app.post("/api/brain/proposals/bulk", dependencies=[Depends(require_auth)])
+def bulk_action_proposals(req: BulkProposalRequest) -> dict[str, str]:
+    workspace = workspace_id(req.workspace_id)
+    path = store.workspace_path(workspace) / "brain" / "learning_proposals.json"
+    data = store.read_json(path)
+    
+    brain = store.workspace_path(workspace) / "brain"
+    targets = {
+        "style": (brain / "style_profile.json", "rules"),
+        "thinking": (brain / "thinking_profile.json", "patterns"),
+        "memory": (brain / "memory.json", "items"),
+        "rule": (brain / "rules.json", "items"),
+    }
+    
+    updated_count = 0
+    for prop in data.get("items", []):
+        if prop["id"] in req.proposal_ids and prop.get("status", "pending") == "pending":
+            if req.action == "reject":
+                prop.update({"status": "rejected", "updated_at": now_iso()})
+                updated_count += 1
+            elif req.action == "approve":
+                prop.update({"status": "approved", "updated_at": now_iso()})
+                updated_count += 1
+                ptype = prop.get("type", "style")
+                if ptype in targets:
+                    target_path, key = targets[ptype]
+                    target_data = store.read_json(target_path)
+                    content = prop["content"]
+                    if ptype in {"memory", "rule"}:
+                        existing = {
+                            (item.get("content", "") if isinstance(item, dict) else str(item)).casefold()
+                            for item in target_data.get(key, [])
+                        }
+                        if content.casefold() not in existing:
+                            target_data.setdefault(key, []).append({
+                                "id": new_id(ptype),
+                                "content": content,
+                                "source_chat_id": prop.get("source_chat_id"),
+                                "created_at": now_iso(),
+                            })
+                            store.write_json(target_path, target_data)
+                    else:
+                        existing = {r.casefold() for r in target_data.get(key, [])}
+                        if content.casefold() not in existing:
+                            target_data.setdefault(key, []).append(content)
+                            store.write_json(target_path, target_data)
+    store.write_json(path, data)
+    return {"status": "success", "updated": str(updated_count)}
 
 @app.post("/api/sync/run", dependencies=[Depends(require_auth)])
 async def run_sync() -> dict[str, Any]:

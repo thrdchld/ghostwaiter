@@ -675,16 +675,48 @@ function renderBrainTab() {
   $("#brain-compare").classList.toggle("hidden", state.brainTab !== "compare");
   $("#reference-search").classList.toggle("hidden", state.brainTab !== "references");
   $("#proposal-list").classList.toggle("hidden", state.brainTab !== "proposals");
-  let items = [];
-  if (state.brainTab === "style") items = state.brain.style_profile.rules;
-  if (state.brainTab === "thinking") items = state.brain.thinking_profile.patterns;
-  $("#brain-list").innerHTML = items.map(item => `<article class="insight">${escapeHtml(item)}</article>`).join("")
-    || `<div class="empty-state" style="min-height:240px"><strong>No patterns yet.</strong><span>Train revisions or provide writing samples.</span></div>`;
+  
+  const list = $("#brain-list");
+  if (state.brainTab === "style") {
+    const items = state.brain.style_profile.rules || [];
+    list.innerHTML = items.length ? items.map(item => `
+      <article class="insight-card">
+        <p>${escapeHtml(item)}</p>
+        <div class="insight-meta" style="display:flex; gap:12px; margin-top:8px;">
+          <button class="text-button compact" onclick="editBrainItem('style', '${escapeHtml(item).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}')">Edit</button>
+          <button class="text-button compact danger" onclick="deleteBrainItem('style', '${escapeHtml(item).replace(/'/g, "\\'")}')">Hapus</button>
+        </div>
+      </article>`).join("") : `<div class="empty-state" style="min-height:240px"><strong>Belum ada pola.</strong><span>Latih revisi atau sediakan sampel tulisan.</span></div>`;
+  } else if (state.brainTab === "thinking") {
+    const items = state.brain.thinking_profile.patterns || [];
+    list.innerHTML = items.length ? items.map(item => `
+      <article class="insight-card">
+        <p>${escapeHtml(item)}</p>
+        <div class="insight-meta" style="display:flex; gap:12px; margin-top:8px;">
+          <button class="text-button compact" onclick="editBrainItem('thinking', '${escapeHtml(item).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}')">Edit</button>
+          <button class="text-button compact danger" onclick="deleteBrainItem('thinking', '${escapeHtml(item).replace(/'/g, "\\'")}')">Hapus</button>
+        </div>
+      </article>`).join("") : `<div class="empty-state" style="min-height:240px"><strong>Belum ada pola pemikiran.</strong></div>`;
+  } else if (state.brainTab === "memory") {
+    const mems = state.brain.memory || [];
+    const convMems = state.brain.conversation_memory || [];
+    const allMems = [...mems, ...convMems];
+    list.innerHTML = allMems.length ? allMems.map(item => `
+      <article class="insight-card">
+        <p>${escapeHtml(item.content)}</p>
+        <div class="insight-meta" style="display:flex; gap:12px; margin-top:8px;">
+          <button class="text-button compact" onclick="editBrainItem('memory', '${escapeHtml(item.id)}', '${escapeHtml(item.content).replace(/'/g, "\\'")}')">Edit</button>
+          <button class="text-button compact danger" onclick="deleteBrainItem('memory', '${escapeHtml(item.id)}')">Hapus</button>
+        </div>
+      </article>`).join("") : `<div class="empty-state" style="min-height:240px"><strong>Belum ada memori.</strong></div>`;
+  }
 }
 
 async function loadProposals() {
   try {
     const data = await jsonApi(`/api/brain/proposals?workspace_id=${encodeURIComponent(state.workspace)}&status=pending`);
+    const bulkDiv = $("#proposal-bulk-actions");
+    if (bulkDiv) bulkDiv.style.display = data.items.length > 0 ? "flex" : "none";
     $("#proposal-list").innerHTML = data.items.map(item => `
       <article class="proposal-card" data-id="${escapeHtml(item.id)}">
         <label>${escapeHtml(item.type)}</label>
