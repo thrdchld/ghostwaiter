@@ -55,6 +55,26 @@ function toast(message, type = "info") {
   node.timer = setTimeout(() => node.className = `toast ${type} hidden`, 2800);
 }
 
+
+function updateModelIndicator() {
+  const key = localStorage.getItem("ghostwriter:openrouter_key");
+  const model = localStorage.getItem("ghostwriter:openrouter_model");
+  const btn = $("#model-status");
+  if (!btn) return;
+  const icon = btn.querySelector("i");
+  const label = btn.querySelector("span");
+  if (key && model) {
+    if (icon) { icon.style.background = "#22c55e"; icon.style.boxShadow = "0 0 6px #22c55e88"; }
+    const shortModel = model.split("/").pop();
+    if (label) label.textContent = shortModel.length > 18 ? shortModel.slice(0, 16) + "…" : shortModel;
+    btn.title = model;
+  } else {
+    if (icon) { icon.style.background = ""; icon.style.boxShadow = ""; }
+    if (label) label.textContent = "AI";
+    btn.title = "Click to configure AI";
+  }
+}
+
 function showConfirm(message) {
   return new Promise(resolve => {
     const modal = $("#confirm-modal");
@@ -215,6 +235,7 @@ async function initialize() {
   await loadWorkspaces();
   await Promise.all([loadSyncStatus()]);
   restoreLocalDraft();
+  updateModelIndicator();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/service-worker.js");
 }
 
@@ -342,7 +363,7 @@ async function sendChat(event) {
     }
   } catch (error) {
     if (error.message.includes("Semua model inference gagal")) {
-      if (!fullResponse.trim()) assistant.querySelector(".msg-content").innerHTML = renderMarkdown("*(Jaringan AI sedang sibuk atau kuota habis, coba lagi nanti)*");
+      if (!fullResponse.trim()) assistant.querySelector(".msg-content").innerHTML = renderMarkdown("*(AI network is busy or quota exceeded, please try again later)*");
     } else {
       if (fullResponse.trim()) {
         toast(`Connection lost: ${error.message}`, "error");
@@ -367,7 +388,7 @@ async function sendChat(event) {
 function resetChat() {
   state.currentChat = null;
   $("#chat-title").textContent = "New Chat";
-  $("#chat-messages").innerHTML = `<div class="empty-state"><strong>Mulai dari sebuah pemikiran.</strong><span>Diskusikan ide, susun argumen, atau minta umpan balik.</span></div>`;
+  $("#chat-messages").innerHTML = `<div class="empty-state"><strong>Start with a thought.</strong><span>Discuss ideas, structure arguments, or request feedback.</span></div>`;
 }
 
 async function showChatList() {
@@ -389,11 +410,11 @@ async function renderChatHistory(archived) {
   $("#chat-list-content").innerHTML = data.items.map(item => `
     <div class="chat-row">
       <button class="sheet-option ${archived ? "" : "chat-option"}" data-id="${escapeHtml(item.id)}" type="button">
-        <span><strong>${escapeHtml(item.title)}</strong><small>${item.messages.length} pesan · ${new Date(item.updated_at).toLocaleString("id-ID")}</small></span>
+        <span><strong>${escapeHtml(item.title)}</strong><small>${item.messages.length} messages · ${new Date(item.updated_at).toLocaleString("en-US")}</small></span>
       </button>
       <div class="row-actions">
         ${archived
-          ? `<button class="mini-button restore-chat" data-id="${escapeHtml(item.id)}">Restore</button><button class="mini-button danger purge-chat" data-id="${escapeHtml(item.id)}">Hapus</button>`
+          ? `<button class="mini-button restore-chat" data-id="${escapeHtml(item.id)}">Restore</button><button class="mini-button danger purge-chat" data-id="${escapeHtml(item.id)}">Delete</button>`
           : `<button class="mini-button rename-chat" data-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title)}">Edit</button><button class="mini-button danger archive-chat" data-id="${escapeHtml(item.id)}">Archive</button>`}
       </div>
     </div>`).join("") || `<p class="empty-state" style="min-height:180px">${archived ? "Archive is empty." : "No history yet."}</p>`;
@@ -426,7 +447,7 @@ async function restoreChat(id) {
 }
 
 async function purgeChat(id) {
-  if (!(await showConfirm("Hapus permanen chat ini? Backup internal tetap dibuat, tetapi tidak tersedia dari UI."))) return;
+  if (!(await showConfirm("Permanently delete this chat? An internal backup will be created but won't be accessible from the UI."))) return;
   await jsonApi("/api/chat/delete-permanent", {method: "POST", body: {workspace_id: state.workspace, chat_id: id}});
   await renderChatHistory(true);
 }
@@ -510,7 +531,7 @@ function restoreLocalDraft() {
     $("#draft-title").value = draft.title || "Untitled";
     $("#draft-content").value = draft.content || "";
     $("#write-prompt").value = draft.prompt || "";
-    $("#save-state").textContent = "Dipulihkan dari perangkat";
+    $("#save-state").textContent = "Restored from device";
   } catch (_) {}
   
   undoStack.length = 0;
@@ -521,7 +542,7 @@ function restoreLocalDraft() {
 
 function scheduleDraftSave() {
   saveDraftLocally();
-  $("#save-state").textContent = navigator.onLine ? "Menyimpan..." : "Tersimpan offline";
+  $("#save-state").textContent = navigator.onLine ? "Saving..." : "Saved offline";
   clearTimeout(state.saveTimer);
   state.saveTimer = setTimeout(saveDraftToServer, 1200);
 }
@@ -542,10 +563,10 @@ async function saveDraftToServer() {
       body: {workspace_id: state.workspace, draft_id: state.currentDraft, title, content},
     });
     saveDraftLocally();
-    $("#save-state").textContent = "Tersimpan";
+    $("#save-state").textContent = "Saved";
     loadSyncStatus();
   } catch (error) {
-    $("#save-state").textContent = "Tersimpan offline";
+    $("#save-state").textContent = "Saved offline";
   }
 }
 
@@ -553,7 +574,7 @@ async function showDraftList() {
   const data = await jsonApi(`/api/draft/list?workspace_id=${encodeURIComponent(state.workspace)}`);
   const html = data.items.map(item => `
     <button class="sheet-option draft-option" data-id="${escapeHtml(item.id)}" type="button">
-      <span><strong>${escapeHtml(item.title)}</strong><small>${new Date(item.updated_at).toLocaleString("id-ID")}</small></span><b>›</b>
+      <span><strong>${escapeHtml(item.title)}</strong><small>${new Date(item.updated_at).toLocaleString("en-US")}</small></span><b>›</b>
     </button>`).join("") || `<p class="empty-state" style="min-height:180px">Belum ada draft.</p>`;
   openSheet("Draft", html);
   $$(".draft-option").forEach(button => button.onclick = () => loadDraft(button.dataset.id));
@@ -565,7 +586,7 @@ async function loadDraft(id) {
   state.originalAiText = draft.content;
   $("#draft-title").value = draft.title;
   $("#draft-content").value = draft.content;
-  $("#save-state").textContent = "Tersimpan";
+  $("#save-state").textContent = "Saved";
   saveDraftLocally();
   closeSheet();
 }
@@ -706,7 +727,7 @@ async function compareRevision() {
 async function commitCompare() {
   const button = $("#commit-compare-button");
   button.disabled = true;
-  button.textContent = "Menyimpan...";
+  button.textContent = "Saving...";
   const style_rules = [];
   const thinking_patterns = [];
   $$(".compare-proposal-content").forEach(el => {
@@ -798,7 +819,7 @@ async function manualSync() {
 
 
 function bindEvents() {
-  if ($("#model-status")) $("#model-status").onclick = () => toast(`OpenRouter: ${localStorage.getItem("ghostwriter:openrouter_model") || "None"}`);
+  if ($("#model-status")) $("#model-status").onclick = () => { const m = localStorage.getItem("ghostwriter:openrouter_model"); const k = localStorage.getItem("ghostwriter:openrouter_key"); toast(m && k ? `Active: ${m}` : "No AI model configured. Go to Settings → AI.", m && k ? "success" : "error"); };
   if ($("#new-chat-button")) $("#new-chat-button").onclick = () => { resetChat(); closeSheet(); };
   document.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.shiftKey) {
@@ -845,6 +866,7 @@ function bindEvents() {
   
   orKeyInput.addEventListener("input", () => {
     localStorage.setItem("ghostwriter:openrouter_key", orKeyInput.value.trim());
+    updateModelIndicator();
   });
 
   function renderModels() {
@@ -874,6 +896,7 @@ function bindEvents() {
       el.onclick = () => {
         localStorage.setItem("ghostwriter:openrouter_model", model.id);
         orModelDisplay.textContent = model.id;
+        updateModelIndicator();
         toast(`Model updated: ${model.id}`, "success");
       };
       modelsList.appendChild(el);

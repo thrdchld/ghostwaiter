@@ -188,7 +188,7 @@ def require_auth(
     authorization: str | None = Header(default=None),
 ) -> None:
     if not _valid_session(gw_session) and not _valid_session(_bearer_token(authorization)):
-        raise error("Autentikasi diperlukan", 401)
+        raise error("Authentication required", 401)
 
 
 def workspace_id(value: str | None) -> str:
@@ -198,24 +198,24 @@ def workspace_id(value: str | None) -> str:
     except ValueError as exc:
         raise error(str(exc)) from exc
     if selected not in {item["id"] for item in store.list_workspaces()}:
-        raise error("Workspace tidak ditemukan", 404)
+        raise error("Workspace not found", 404)
     return selected
 
 
 def _brain_system_prompt(workspace: str, purpose: str, context: str = "") -> str:
     base = (
-        "Anda adalah GhostWriter, asisten penulisan personal. Jawab dalam bahasa pengguna. "
-        "Jangan mengarang fakta, jangan menjalankan perintah sistem, dan prioritaskan tulisan yang jelas."
+        "You are GhostWriter, a personal writing assistant. Reply in the user's language. "
+        "Do not fabricate facts, do not execute system commands, and prioritize clear writing."
     )
     modes = {
-        "chat": "Bantu pengguna berpikir dan berdiskusi secara natural.",
-        "write": "Tulis hasil final langsung tanpa kata pengantar.",
-        "rewrite": "Tulis ulang teks sesuai instruksi tanpa menjelaskan proses.",
-        "paraphrase": "Parafrase dengan mempertahankan makna utama.",
+        "chat": "Help the user think and discuss naturally.",
+        "write": "Write the final result directly without preamble.",
+        "rewrite": "Rewrite the text per the instruction without explaining the process.",
+        "paraphrase": "Paraphrase while preserving the main meaning.",
     }
     formatting = (
-        "Gunakan Markdown yang rapi bila membantu: heading, daftar, penekanan, kutipan, dan code block. "
-        "Jangan tampilkan simbol Markdown tanpa fungsi."
+        "Use clean Markdown where helpful: headings, lists, emphasis, quotes, and code blocks. "
+        "Do not display Markdown symbols that serve no purpose."
     )
     return f"{base}\n{modes.get(purpose, modes['write'])}\n{formatting}\n\n{context or ai_service.context(workspace)}".strip()
 
@@ -310,7 +310,7 @@ def new_chat(req: WorkspaceRequest) -> dict[str, str]:
         {
             "schema_version": 1,
             "id": chat_id,
-            "title": "Obrolan baru",
+            "title": "New Chat",
             "messages": [],
             "created_at": timestamp,
             "updated_at": timestamp,
@@ -339,7 +339,7 @@ def get_chat(chat_id: str, workspace_id_query: str | None = Query(default=None, 
     try:
         return store.get_entity(workspace_id(workspace_id_query), "chats", chat_id)
     except (FileNotFoundError, ValueError) as exc:
-        raise error("Chat tidak ditemukan", 404) from exc
+        raise error("Chat not found", 404) from exc
 
 
 @app.post("/api/chat/archive", dependencies=[Depends(require_auth)])
@@ -347,7 +347,7 @@ def archive_chat(req: ChatIdRequest) -> dict[str, str]:
     try:
         chat = store.get_entity(workspace_id(req.workspace_id), "chats", req.chat_id)
     except (FileNotFoundError, ValueError) as exc:
-        raise error("Chat tidak ditemukan", 404) from exc
+        raise error("Chat not found", 404) from exc
     chat["archived"] = True
     chat["updated_at"] = now_iso()
     store.save_entity(req.workspace_id, "chats", chat)
@@ -359,7 +359,7 @@ def restore_chat(req: ChatIdRequest) -> dict[str, str]:
     try:
         chat = store.get_entity(workspace_id(req.workspace_id), "chats", req.chat_id)
     except (FileNotFoundError, ValueError) as exc:
-        raise error("Chat tidak ditemukan", 404) from exc
+        raise error("Chat not found", 404) from exc
     chat["archived"] = False
     chat["updated_at"] = now_iso()
     store.save_entity(req.workspace_id, "chats", chat)
@@ -371,7 +371,7 @@ def rename_chat(req: ChatRenameRequest) -> dict[str, str]:
     try:
         chat = store.get_entity(workspace_id(req.workspace_id), "chats", req.chat_id)
     except (FileNotFoundError, ValueError) as exc:
-        raise error("Chat tidak ditemukan", 404) from exc
+        raise error("Chat not found", 404) from exc
     chat["title"] = " ".join(req.title.split())
     chat["updated_at"] = now_iso()
     store.save_entity(req.workspace_id, "chats", chat)
@@ -383,12 +383,12 @@ def permanently_delete_chat(req: ChatIdRequest) -> dict[str, str]:
     try:
         chat = store.get_entity(workspace_id(req.workspace_id), "chats", req.chat_id)
         if not chat.get("archived"):
-            raise error("Chat harus diarsipkan sebelum dihapus permanen")
+            raise error("Chat must be archived before permanent deletion")
         store.permanently_delete_entity(req.workspace_id, "chats", req.chat_id)
     except HTTPException:
         raise
     except (FileNotFoundError, ValueError) as exc:
-        raise error("Chat tidak ditemukan", 404) from exc
+        raise error("Chat not found", 404) from exc
     return {"status": "success"}
 
 
@@ -467,7 +467,7 @@ async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str, 
     messages = [{"role": "system", "content": _brain_system_prompt(workspace, "chat", app_context)}]
     if chat.get("summary"):
         messages.append(
-            {"role": "system", "content": f"Ringkasan percakapan sebelumnya:\n{chat['summary']}"}
+            {"role": "system", "content": f"Previous conversation summary:\n{chat['summary']}"}
         )
     messages.extend(
         {"role": item["role"], "content": item["content"]}
@@ -486,7 +486,7 @@ async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str, 
         if answer:
             chat["messages"].append({"role": "assistant", "content": answer, "timestamp": now_iso()})
         chat["updated_at"] = now_iso()
-        if chat["title"] == "Obrolan baru":
+        if chat["title"] == "New Chat":
             chat["title"] = user_message[:60]
         store.save_entity(workspace, "chats", chat)
         if answer:
@@ -500,16 +500,16 @@ def send_chat(req: ChatRequest, auth: tuple[str, str] = Depends(get_or_auth)) ->
         try:
             chat = store.get_entity(workspace, "chats", req.chat_id)
         except (FileNotFoundError, ValueError) as exc:
-            raise error("Chat tidak ditemukan", 404) from exc
+            raise error("Chat not found", 404) from exc
         if chat.get("archived"):
-            raise error("Chat berada di arsip. Restore chat sebelum melanjutkan.", 409)
+            raise error("Chat is archived. Please restore it before continuing.", 409)
     else:
         chat_id = new_id("chat")
         timestamp = now_iso()
         chat = {
             "schema_version": 1,
             "id": chat_id,
-            "title": "Obrolan baru",
+            "title": "New Chat",
             "messages": [],
             "created_at": timestamp,
             "updated_at": timestamp,
@@ -548,7 +548,7 @@ def update_draft(req: DraftUpdateRequest) -> dict[str, Any]:
     try:
         draft = store.get_entity(workspace, "drafts", req.draft_id)
     except (FileNotFoundError, ValueError) as exc:
-        raise error("Draft tidak ditemukan", 404) from exc
+        raise error("Draft not found", 404) from exc
     changes = req.model_dump(exclude_none=True, exclude={"workspace_id", "draft_id"})
     draft.update(changes)
     draft["updated_at"] = now_iso()
@@ -572,7 +572,7 @@ def get_draft(draft_id: str, workspace_id_query: str | None = Query(default=None
     try:
         return store.get_entity(workspace_id(workspace_id_query), "drafts", draft_id)
     except (FileNotFoundError, ValueError) as exc:
-        raise error("Draft tidak ditemukan", 404) from exc
+        raise error("Draft not found", 404) from exc
 
 
 @app.post("/api/draft/delete", dependencies=[Depends(require_auth)])
@@ -580,11 +580,11 @@ def delete_draft(req: DraftIdRequest) -> dict[str, str]:
     try:
         store.delete_entity(workspace_id(req.workspace_id), "drafts", req.draft_id)
     except (FileNotFoundError, ValueError) as exc:
-        raise error("Draft tidak ditemukan", 404) from exc
+        raise error("Draft not found", 404) from exc
     return {"status": "success"}
 
 
-async def _generate_stream(workspace: str, prompt: str, mode: str):
+async def _generate_stream(workspace: str, prompt: str, mode: str, api_key: str, model: str):
     messages = [
         {"role": "system", "content": _brain_system_prompt(workspace, mode)},
         {"role": "user", "content": prompt},
@@ -665,8 +665,8 @@ async def commit_revision(req: CommitRevisionRequest) -> dict[str, Any]:
 async def learn_raw(req: RawWritingRequest, auth: tuple[str, str] = Depends(get_or_auth)) -> dict[str, Any]:
     workspace = workspace_id(req.workspace_id)
     prompt = (
-        "Analisis gaya tulisan berikut. Balas satu aturan gaya yang konkret, singkat, "
-        "dan dapat diterapkan kembali. Jangan merangkum isi."
+        "Analyze the following writing style. Reply with one concrete, concise style rule "
+        "that can be reapplied. Do not summarize the content."
     )
     try:
         rule = (
@@ -721,7 +721,7 @@ def brain_profile(workspace_id_query: str | None = Query(default=None, alias="wo
 async def search_references(req: ReferenceSearchRequest) -> dict[str, Any]:
     workspace = workspace_id(req.workspace_id)
     if not settings.tavily_api_key:
-        raise error("TAVILY_API_KEY belum dikonfigurasi untuk pencarian web", 503)
+        raise error("TAVILY_API_KEY is not configured for web search", 503)
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
             "https://api.tavily.com/search",
@@ -765,7 +765,7 @@ def get_reference(
     try:
         return store.get_entity(workspace_id(workspace_id_query), "references", reference_id)
     except (FileNotFoundError, ValueError) as exc:
-        raise error("Referensi tidak ditemukan", 404) from exc
+        raise error("Reference not found", 404) from exc
 
 
 @app.get("/api/brain/proposals", dependencies=[Depends(require_auth)])
@@ -787,7 +787,7 @@ def approve_learning_proposal(req: LearningProposalRequest) -> dict[str, Any]:
     data = store.read_json(path)
     proposal = next((item for item in data["items"] if item["id"] == req.proposal_id), None)
     if not proposal:
-        raise error("Usulan pembelajaran tidak ditemukan", 404)
+        raise error("Learning proposal not found", 404)
     content = (req.content or proposal["content"]).strip()
     proposal.update({"content": content, "status": "approved", "updated_at": now_iso()})
     brain = store.workspace_path(workspace) / "brain"
@@ -828,7 +828,7 @@ def reject_learning_proposal(req: LearningProposalRequest) -> dict[str, Any]:
     data = store.read_json(path)
     proposal = next((item for item in data["items"] if item["id"] == req.proposal_id), None)
     if not proposal:
-        raise error("Usulan pembelajaran tidak ditemukan", 404)
+        raise error("Learning proposal not found", 404)
     proposal.update({"status": "rejected", "updated_at": now_iso()})
     store.write_json(path, data)
     return {"status": "success"}
@@ -844,7 +844,7 @@ def _backup_payload() -> dict[str, Any]:
 
 async def _github_sync() -> tuple[bool, str]:
     if not settings.github_token or not settings.github_repo:
-        return False, "GITHUB_TOKEN atau GITHUB_BACKUP_REPO belum dikonfigurasi"
+        return False, "GITHUB_TOKEN or GITHUB_BACKUP_REPO is not configured"
     owner_repo = settings.github_repo.removeprefix("https://github.com/").removesuffix(".git").strip("/")
     if owner_repo.count("/") != 1:
         return False, "Format GITHUB_BACKUP_REPO harus owner/repo"
@@ -922,7 +922,7 @@ def download_snapshot(snapshot_id: str) -> FileResponse:
     try:
         path = store.snapshot_path(snapshot_id)
     except FileNotFoundError as exc:
-        raise error("Snapshot tidak ditemukan", 404) from exc
+        raise error("Snapshot not found", 404) from exc
     return FileResponse(path, media_type="application/zip", filename=path.name)
 
 
@@ -931,14 +931,14 @@ def restore_snapshot(req: SnapshotRestoreRequest) -> dict[str, str]:
     try:
         path = store.snapshot_path(req.snapshot_id)
     except FileNotFoundError as exc:
-        raise error("Snapshot tidak ditemukan", 404) from exc
+        raise error("Snapshot not found", 404) from exc
     store.create_snapshot()
     with zipfile.ZipFile(path) as archive:
         root = store.root.resolve()
         for member in archive.infolist():
             target = (root / member.filename).resolve()
             if root not in target.parents and target != root:
-                raise error("Snapshot mengandung path yang tidak aman")
+                raise error("Snapshot contains an unsafe path")
         archive.extractall(store.root)
     return {"status": "success"}
 
@@ -977,11 +977,11 @@ def import_data(file: UploadFile = File(...)) -> dict[str, str]:
             with zipfile.ZipFile(zip_path) as archive:
                 archive.extractall(tmp_path)
         except zipfile.BadZipFile:
-            raise error("File zip rusak atau tidak valid")
+            raise error("Zip file is corrupted or invalid")
             
         workspaces_dir = tmp_path / "workspaces"
         if not workspaces_dir.exists() or not workspaces_dir.is_dir():
-            raise error("Tidak ditemukan folder workspaces dalam zip")
+            raise error("No workspaces folder found in the zip")
             
         existing_names = {ws["name"] for ws in store.list_workspaces()}
         
