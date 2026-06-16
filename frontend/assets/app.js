@@ -876,18 +876,42 @@ async function loadSyncStatus() {
 
 
 
-async function manualSync() {
-  if (!(await showConfirm("Sinkronisasi ke GitHub sekarang?"))) return;
-  try {
-    $("#manual-sync").disabled = true;
-    await jsonApi("/api/sync/run", {method: "POST"});
-    toast("Sinkronisasi selesai", "success");
-    await loadSyncStatus();
-  } catch (error) {
-    toast(error.message, "error");
-  } finally {
-    $("#manual-sync").disabled = false;
-  }
+function manualSync() {
+  $("#sync-modal").classList.remove("hidden");
+  
+  $("#sync-cancel").onclick = () => $("#sync-modal").classList.add("hidden");
+  
+  $("#sync-push-btn").onclick = async () => {
+    $("#sync-modal").classList.add("hidden");
+    if (!(await showConfirm("Data di GitHub akan ditimpa seluruhnya dengan data lokal Anda saat ini. Lanjutkan Push?"))) return;
+    try {
+      $("#manual-sync").disabled = true;
+      toast("Mengirim data ke GitHub...", "info");
+      await jsonApi("/api/sync/push", {method: "POST"});
+      toast("Sinkronisasi Push selesai", "success");
+      await loadSyncStatus();
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      $("#manual-sync").disabled = false;
+    }
+  };
+
+  $("#sync-pull-btn").onclick = async () => {
+    $("#sync-modal").classList.add("hidden");
+    if (!(await showConfirm("Data lokal Anda akan ditimpa dengan data dari GitHub. Tindakan ini tidak dapat dibatalkan. Lanjutkan Pull?"))) return;
+    try {
+      $("#manual-sync").disabled = true;
+      toast("Mengambil data dari GitHub...", "info");
+      await jsonApi("/api/sync/pull", {method: "POST"});
+      toast("Sinkronisasi Pull selesai. Memuat ulang aplikasi...", "success");
+      setTimeout(() => location.reload(), 1500);
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      $("#manual-sync").disabled = false;
+    }
+  };
 }
 
 

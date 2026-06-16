@@ -929,46 +929,148 @@ def reject_learning_proposal(req: LearningProposalRequest) -> dict[str, Any]:
     return {"status": "success"}
 
 
-def _backup_payload() -> dict[str, Any]:
-    payload: dict[str, Any] = {"schema_version": 1, "created_at": now_iso(), "files": {}}
-    for path in store.root.rglob("*.json"):
-        if ".git" not in path.parts:
-            payload["files"][str(path.relative_to(store.root))] = store.read_json(path)
-    return payload
-
-
-async def _github_sync() -> tuple[bool, str]:
+async def _github_push() -> tuple[bool, str]:
     if not settings.github_token or not settings.github_repo:
         return False, "GITHUB_TOKEN or GITHUB_BACKUP_REPO is not configured"
     owner_repo = settings.github_repo.removeprefix("https://github.com/").removesuffix(".git").strip("/")
     if owner_repo.count("/") != 1:
         return False, "Format GITHUB_BACKUP_REPO harus owner/repo"
-    api_url = f"https://api.github.com/repos/{owner_repo}/contents/ghostwriter-backup.json"
+        
     headers = {
         "Authorization": f"Bearer {settings.github_token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    content = base64.b64encode(json.dumps(_backup_payload(), ensure_ascii=False).encode()).decode()
+    
     async with httpx.AsyncClient(timeout=60, headers=headers) as client:
-        current = await client.get(api_url)
-        body: dict[str, Any] = {
-            "message": f"GhostWriter sync {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
-            "content": content,
-        }
-        if current.status_code == 200:
-            body["sha"] = current.json()["sha"]
-        elif current.status_code != 404:
-            return False, f"GitHub API: {current.status_code} {current.text[:200]}"
-        result = await client.put(api_url, json=body)
-        if result.status_code not in {200, 201}:
-            return False, f"GitHub API: {result.status_code} {result.text[:200]}"
+        # 1. Get ref
+        branch = "main"
+        ref_url = f"https://api.github.com/repos/{owner_repo}/git/ref/heads/{branch}"
+        ref_res = await client.get(ref_url)
+        if ref_res.status_code == 404:
+            branch = "master"
+            ref_url = f"https://api.github.com/repos/{owner_repo}/git/ref/heads/{branch}"
+            ref_res = await client.get(ref_url)
+            
+        if ref_res.status_code != 200:
+            if ref_res.status_code == 409 or ref_res.status_code == 404: # empty repo
+                return False, "Repositori kosong atau tidak ada cabang main/master. Harap inisialisasi repositori terlebih dahulu."
+            return False, f"GitHub API (get ref): {ref_res.status_code} {ref_res.text[:200]}"
+            
+        commit_sha = ref_res.json()["object"]["sha"]
+        
+        # 2. Get commit
+        commit_url = f"https://api.github.com/repos/{owner_repo}/git/commits/{commit_sha}"
+        commit_res = await client.get(commit_url)
+        if commit_res.status_code != 200:
+            return False, f"GitHub API (get commit): {commit_res.status_code} {commit_res.text[:200]}"
+            
+        base_tree_sha = commit_res.json()["tree"]["sha"]
+        
+        # 3. Create tree
+        tree = []
+        for path in store.root.rglob("*.json"):
+            if ".git" not in path.parts:
+                rel_path = str(path.relative_to(store.root)).replace("\\", "/")
+                content = json.dumps(store.read_json(path), ensure_ascii=False)
+                tree.append({
+                    "path": rel_path,
+                    "mode": "100644",
+                    "type": "blob",
+                    "content": content
+                })
+                
+        tree_url = f"https://api.github.com/repos/{owner_repo}/git/trees"
+        tree_res = await client.post(tree_url, json={"base_tree": base_tree_sha, "tree": tree})
+        if tree_res.status_code != 201:
+            return False, f"GitHub API (create tree): {tree_res.status_code} {tree_res.text[:200]}"
+            
+        new_tree_sha = tree_res.json()["sha"]
+        
+        # 4. Create commit
+        new_commit_url = f"https://api.github.com/repos/{owner_repo}/git/commits"
+        new_commit_res = await client.post(new_commit_url, json={
+            "message": f"GhostWriter Push {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
+            "tree": new_tree_sha,
+            "parents": [commit_sha]
+        })
+        if new_commit_res.status_code != 201:
+            return False, f"GitHub API (create commit): {new_commit_res.status_code} {new_commit_res.text[:200]}"
+            
+        new_commit_sha = new_commit_res.json()["sha"]
+        
+        # 5. Update ref
+        update_ref_res = await client.patch(ref_url, json={"sha": new_commit_sha, "force": True})
+        if update_ref_res.status_code != 200:
+            return False, f"GitHub API (update ref): {update_ref_res.status_code} {update_ref_res.text[:200]}"
+
     queue_path = store.root / "queue" / "pending_sync.json"
-    store.write_json(queue_path, {"schema_version": 1, "items": []})
+    if queue_path.exists():
+        store.write_json(queue_path, {"schema_version": 1, "items": []})
     system_path = store.root / "system" / "settings.json"
-    system = store.read_json(system_path)
-    system.update({"sync_status": "ok", "last_sync": now_iso()})
-    store.write_json(system_path, system)
+    if system_path.exists():
+        system = store.read_json(system_path)
+        system.update({"sync_status": "ok", "last_sync": now_iso()})
+        store.write_json(system_path, system)
+    return True, ""
+
+
+async def _github_pull() -> tuple[bool, str]:
+    if not settings.github_token or not settings.github_repo:
+        return False, "GITHUB_TOKEN or GITHUB_BACKUP_REPO is not configured"
+    owner_repo = settings.github_repo.removeprefix("https://github.com/").removesuffix(".git").strip("/")
+    if owner_repo.count("/") != 1:
+        return False, "Format GITHUB_BACKUP_REPO harus owner/repo"
+        
+    headers = {
+        "Authorization": f"Bearer {settings.github_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    
+    async with httpx.AsyncClient(timeout=120, headers=headers) as client:
+        # Get branch ref
+        branch = "main"
+        ref_url = f"https://api.github.com/repos/{owner_repo}/git/ref/heads/{branch}"
+        ref_res = await client.get(ref_url)
+        if ref_res.status_code == 404:
+            branch = "master"
+            ref_url = f"https://api.github.com/repos/{owner_repo}/git/ref/heads/{branch}"
+            ref_res = await client.get(ref_url)
+            
+        if ref_res.status_code != 200:
+            return False, f"GitHub API (get ref): {ref_res.status_code} {ref_res.text[:200]}"
+            
+        commit_sha = ref_res.json()["object"]["sha"]
+        
+        # Get tree recursive
+        tree_url = f"https://api.github.com/repos/{owner_repo}/git/trees/{commit_sha}?recursive=1"
+        tree_res = await client.get(tree_url)
+        if tree_res.status_code != 200:
+            return False, f"GitHub API (get tree): {tree_res.status_code} {tree_res.text[:200]}"
+            
+        tree = tree_res.json().get("tree", [])
+        
+        for item in tree:
+            if item["type"] == "blob" and item["path"].endswith(".json"):
+                blob_url = item["url"]
+                blob_res = await client.get(blob_url)
+                if blob_res.status_code == 200:
+                    blob_data = blob_res.json()
+                    content = base64.b64decode(blob_data["content"]).decode('utf-8')
+                    local_path = store.root / Path(item["path"])
+                    local_path.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        parsed_content = json.loads(content)
+                        store.write_json(local_path, parsed_content)
+                    except json.JSONDecodeError:
+                        pass
+
+    system_path = store.root / "system" / "settings.json"
+    if system_path.exists():
+        system = store.read_json(system_path)
+        system.update({"sync_status": "ok", "last_sync": now_iso()})
+        store.write_json(system_path, system)
     return True, ""
 
 
@@ -1026,9 +1128,16 @@ def bulk_action_proposals(req: BulkProposalRequest) -> dict[str, str]:
     store.write_json(path, data)
     return {"status": "success", "updated": str(updated_count)}
 
-@app.post("/api/sync/run", dependencies=[Depends(require_auth)])
-async def run_sync() -> dict[str, Any]:
-    ok, message = await _github_sync()
+@app.post("/api/sync/push", dependencies=[Depends(require_auth)])
+async def run_sync_push() -> dict[str, Any]:
+    ok, message = await _github_push()
+    if not ok:
+        raise error(message, 503)
+    return {"status": "success", "last_sync": now_iso()}
+
+@app.post("/api/sync/pull", dependencies=[Depends(require_auth)])
+async def run_sync_pull() -> dict[str, Any]:
+    ok, message = await _github_pull()
     if not ok:
         raise error(message, 503)
     return {"status": "success", "last_sync": now_iso()}

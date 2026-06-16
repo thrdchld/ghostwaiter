@@ -221,6 +221,19 @@
       </div>
     </div>
   </div>
+  <div id="sync-modal" class="backdrop modal-overlay hidden">
+    <div class="dialog-card">
+      <h3 style="margin: 0 0 16px 0; font-size: 1.25rem;">Sinkronisasi GitHub</h3>
+      <p style="margin-bottom: 24px; color: var(--text-muted); font-size: 0.875rem;">Pilih metode sinkronisasi. "Kirim" akan menimpa data di GitHub dengan data lokal Anda. "Ambil" akan menimpa data lokal Anda dengan data dari GitHub.</p>
+      <div style="display:flex; flex-direction:column; gap:12px; margin-bottom: 24px;">
+         <button id="sync-push-btn" class="button primary" type="button" style="width:100%; justify-content:center;">Kirim ke GitHub (Push)</button>
+         <button id="sync-pull-btn" class="button primary" type="button" style="width:100%; justify-content:center;">Ambil dari GitHub (Pull)</button>
+      </div>
+      <div class="dialog-actions" style="justify-content:center;">
+        <button id="sync-cancel" class="button compact" type="button">Batal</button>
+      </div>
+    </div>
+  </div>
   <div id="toast" class="toast hidden"></div>
   <script src="/assets/app.js?v=2" defer></script>
 </body>
