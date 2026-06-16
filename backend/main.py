@@ -179,6 +179,9 @@ def _bearer_token(authorization: str | None) -> str | None:
     scheme, _, token = authorization.partition(" ")
     return token if scheme.casefold() == "bearer" and token else None
 
+def get_or_auth(request: Request) -> tuple[str, str]:
+    return request.headers.get("X-OpenRouter-Key", ""), request.headers.get("X-OpenRouter-Model", "")
+
 
 def require_auth(
     gw_session: str | None = Cookie(default=None),
@@ -457,7 +460,7 @@ async def _analyze_chat_background(workspace: str, chat_id: str, api_key: str, m
         return
 
 
-async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str):
+async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str, api_key: str, model: str):
     chat["messages"].append({"role": "user", "content": user_message, "timestamp": now_iso()})
     app_context, accessed_workspaces = build_chat_context(workspace, user_message)
     chat["accessed_workspaces"] = accessed_workspaces
@@ -487,11 +490,11 @@ async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str):
             chat["title"] = user_message[:60]
         store.save_entity(workspace, "chats", chat)
         if answer:
-            asyncio.create_task(_analyze_chat_background(workspace, chat["id"], auth[0], auth[1]))
+            asyncio.create_task(_analyze_chat_background(workspace, chat["id"], api_key, model))
 
 
 @app.post("/api/chat/send", dependencies=[Depends(require_auth)])
-def send_chat(req: ChatRequest) -> StreamingResponse:
+def send_chat(req: ChatRequest, auth: tuple[str, str] = Depends(get_or_auth)) -> StreamingResponse:
     workspace = workspace_id(req.workspace_id)
     if req.chat_id:
         try:
@@ -515,7 +518,7 @@ def send_chat(req: ChatRequest) -> StreamingResponse:
             "accessed_workspaces": [],
         }
     return StreamingResponse(
-        _chat_stream(workspace, chat, req.message),
+        _chat_stream(workspace, chat, req.message, auth[0], auth[1]),
         media_type="text/plain; charset=utf-8",
         headers={"X-Chat-Id": chat["id"], "Cache-Control": "no-cache"},
     )
