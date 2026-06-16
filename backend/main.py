@@ -1000,7 +1000,8 @@ async def _github_push() -> tuple[bool, str]:
         new_commit_sha = new_commit_res.json()["sha"]
         
         # 5. Update ref
-        update_ref_res = await client.patch(ref_url, json={"sha": new_commit_sha, "force": True})
+        patch_url = f"https://api.github.com/repos/{owner_repo}/git/refs/heads/{branch}"
+        update_ref_res = await client.patch(patch_url, json={"sha": new_commit_sha, "force": True})
         if update_ref_res.status_code != 200:
             return False, f"GitHub API (update ref): {update_ref_res.status_code} {update_ref_res.text[:200]}"
 
