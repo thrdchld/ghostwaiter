@@ -288,14 +288,20 @@ async function loadWorkspaces() {
 
 function showWorkspaceSheet() {
   const items = state.workspaces.map(item => `
-    <button class="sheet-option workspace-option" data-id="${escapeHtml(item.id)}" type="button">
-      <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.id)}</small></span>
-      <b>${item.id === state.workspace ? "✓" : ""}</b>
-    </button>`).join("");
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border);">
+      <button class="sheet-option workspace-option" data-id="${escapeHtml(item.id)}" type="button" style="flex:1; border-bottom:none;">
+        <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.id)}</small></span>
+        <b>${item.id === state.workspace ? "✓" : ""}</b>
+      </button>
+      <div style="padding-right: 16px; display:flex; gap:8px;">
+         <button class="text-button accent" onclick="editWorkspace('${escapeHtml(item.id)}', '${escapeHtml(item.name).replace(/'/g, "\\'")}')" style="font-size:12px; padding:4px 8px;">Edit</button>
+         ${item.id === 'writing' ? '' : `<button class="text-button danger" onclick="deleteWorkspace('${escapeHtml(item.id)}')" style="font-size:12px; padding:4px 8px; color:var(--error);">Hapus</button>`}
+      </div>
+    </div>`).join("");
   openSheet("Pilih workspace", `${items}
     <button id="create-workspace" class="button primary" style="width:100%;margin-top:16px" type="button">New Workspace</button>`);
   $$(".workspace-option").forEach(button => button.onclick = () => switchWorkspace(button.dataset.id));
-  $("#create-workspace").onclick = createWorkspace;
+  $("#create-workspace").onclick = () => createWorkspace();
 }
 
 async function switchWorkspace(id) {
@@ -1165,3 +1171,105 @@ initialize().catch(error => {
   if (error.status === 401) $("#login-screen").classList.remove("hidden");
   else toast(error.message);
 });
+
+// Advanced UI Functions
+window.editWorkspace = async function(id, oldName) {
+  closeSheet();
+  const newName = await showPrompt("Nama baru untuk workspace:", oldName);
+  if (!newName || newName === oldName) return;
+  try {
+    const res = await api("/api/workspace/rename", {
+      method: "POST",
+      body: { workspace_id: id, name: newName }
+    });
+    if (res.status === "success") {
+      state.workspaces = await api("/api/system/workspaces");
+      if (id === state.workspace) {
+        $("#workspace-title").textContent = newName;
+      }
+      toast("Workspace diubah namanya");
+      showWorkspaceSheet();
+    }
+  } catch (err) {
+    toast(err.message, "error");
+  }
+};
+
+window.deleteWorkspace = async function(id) {
+  closeSheet();
+  if (!confirm("Hapus workspace ini beserta seluruh isinya secara permanen?")) return;
+  try {
+    const res = await api("/api/workspace/delete", {
+      method: "POST",
+      body: { workspace_id: id }
+    });
+    if (res.status === "success") {
+      state.workspaces = await api("/api/system/workspaces");
+      if (id === state.workspace) {
+        await switchWorkspace("writing");
+      }
+      toast("Workspace dihapus");
+    }
+  } catch (err) {
+    toast(err.message, "error");
+  }
+};
+
+window.editBrainItem = async function(type, idOrContent, currentContent) {
+  const newContent = await showPrompt("Edit konten:", currentContent || idOrContent);
+  if (!newContent || newContent === (currentContent || idOrContent)) return;
+  try {
+    await api("/api/brain/item/update", {
+      method: "POST",
+      body: { workspace_id: state.workspace, type, id_or_content: idOrContent, new_content: newContent }
+    });
+    toast("Item diperbarui");
+    loadProfile();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+};
+
+window.deleteBrainItem = async function(type, idOrContent) {
+  if (!confirm("Hapus item ini?")) return;
+  try {
+    await api("/api/brain/item/delete", {
+      method: "POST",
+      body: { workspace_id: state.workspace, type, id_or_content: idOrContent }
+    });
+    toast("Item dihapus");
+    loadProfile();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+};
+
+window.bulkApproveProposals = async function() {
+  const ids = (state.brain.proposals || []).map(p => p.id);
+  if (!ids.length) return;
+  try {
+    await api("/api/brain/proposals/bulk", {
+      method: "POST",
+      body: { workspace_id: state.workspace, action: "approve", proposal_ids: ids }
+    });
+    toast("Semua proposal disetujui");
+    loadProfile();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+};
+
+window.bulkRejectProposals = async function() {
+  const ids = (state.brain.proposals || []).map(p => p.id);
+  if (!ids.length) return;
+  try {
+    await api("/api/brain/proposals/bulk", {
+      method: "POST",
+      body: { workspace_id: state.workspace, action: "reject", proposal_ids: ids }
+    });
+    toast("Semua proposal ditolak");
+    loadProfile();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+};

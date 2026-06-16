@@ -61,6 +61,25 @@ class WorkspaceCreateRequest(BaseModel):
     name: str = Field(min_length=1)
 
 
+class WorkspaceRenameRequest(WorkspaceRequest):
+    name: str = Field(min_length=1)
+
+class WorkspaceDeleteRequest(WorkspaceRequest):
+    pass
+
+class BrainItemUpdateRequest(WorkspaceRequest):
+    type: Literal["style", "thinking", "memory"]
+    id_or_content: str
+    new_content: str = Field(min_length=1)
+
+class BrainItemDeleteRequest(WorkspaceRequest):
+    type: Literal["style", "thinking", "memory"]
+    id_or_content: str
+
+class ProposalBulkRequest(WorkspaceRequest):
+    action: Literal["approve", "reject"]
+    proposal_ids: list[str]
+
 class ChatRequest(BaseModel):
     workspace_id: str
     message: str = Field(min_length=1)
@@ -206,11 +225,12 @@ def workspace_id(value: str | None) -> str:
     return selected
 
 
-def _brain_system_prompt(workspace: str, purpose: str, context: str = "") -> str:
+def _brain_system_prompt(workspace: str, purpose: str, context: str = "", model: str = "") -> str:
     base = (
         "Anda adalah GhostWriter, asisten penulis pribadi cerdas. Tujuan Anda adalah membantu pengguna menulis, merevisi, dan mengembangkan ide. "
         "Selalu balas dalam bahasa Indonesia yang natural, namun Anda boleh menggunakan kata serapan bahasa Inggris untuk istilah populer (seperti 'draft', 'generate', 'chat', dll). "
-        "Jangan memalsukan fakta, jangan mengeksekusi perintah sistem."
+        "Jangan memalsukan fakta, jangan mengeksekusi perintah sistem. "
+        f"Anda saat ini menggunakan model AI: {model}."
     )
     modes = {
         "chat": "Bantu pengguna berpikir dan berdiskusi secara natural dan mengalir.",
@@ -498,6 +518,22 @@ async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str, 
             asyncio.create_task(_analyze_chat_background(workspace, chat["id"], api_key, model, provider))
 
 
+@app.post("/api/workspace/rename", dependencies=[Depends(require_auth)])
+def rename_workspace(req: WorkspaceRenameRequest) -> dict[str, Any]:
+    try:
+        item = store.rename_workspace(req.workspace_id, req.name)
+    except (ValueError, KeyError) as exc:
+        raise error(str(exc), 404) from exc
+    return {"status": "success", "workspace": item}
+
+@app.post("/api/workspace/delete", dependencies=[Depends(require_auth)])
+def delete_workspace(req: WorkspaceDeleteRequest) -> dict[str, str]:
+    try:
+        store.delete_workspace(req.workspace_id)
+    except (ValueError, KeyError) as exc:
+        raise error(str(exc), 404) from exc
+    return {"status": "success"}
+
 @app.post("/api/chat/send", dependencies=[Depends(require_auth)])
 def send_chat(req: ChatRequest, auth: tuple[str, str, str] = Depends(get_or_auth)) -> StreamingResponse:
     workspace = workspace_id(req.workspace_id)
@@ -773,6 +809,59 @@ def get_reference(
     except (FileNotFoundError, ValueError) as exc:
         raise error("Reference not found", 404) from exc
 
+
+@app.post("/api/brain/item/update", dependencies=[Depends(require_auth)])
+def update_brain_item(req: BrainItemUpdateRequest) -> dict[str, str]:
+    workspace = workspace_id(req.workspace_id)
+    root = store.workspace_path(workspace) / "brain"
+    
+    if req.type == "style":
+        path = root / "rules.json"
+        data = store.read_json(path)
+        if req.id_or_content in data.get("items", []):
+            idx = data["items"].index(req.id_or_content)
+            data["items"][idx] = req.new_content
+            store.write_json(path, data)
+    elif req.type == "thinking":
+        path = root / "thinking_profile.json"
+        data = store.read_json(path)
+        if req.id_or_content in data.get("patterns", []):
+            idx = data["patterns"].index(req.id_or_content)
+            data["patterns"][idx] = req.new_content
+            store.write_json(path, data)
+    elif req.type == "memory":
+        path = root / "memory.json"
+        data = store.read_json(path)
+        for item in data.get("items", []):
+            if item.get("id") == req.id_or_content or item.get("content") == req.id_or_content:
+                item["content"] = req.new_content
+                store.write_json(path, data)
+                break
+    return {"status": "success"}
+
+@app.post("/api/brain/item/delete", dependencies=[Depends(require_auth)])
+def delete_brain_item(req: BrainItemDeleteRequest) -> dict[str, str]:
+    workspace = workspace_id(req.workspace_id)
+    root = store.workspace_path(workspace) / "brain"
+    
+    if req.type == "style":
+        path = root / "rules.json"
+        data = store.read_json(path)
+        if req.id_or_content in data.get("items", []):
+            data["items"].remove(req.id_or_content)
+            store.write_json(path, data)
+    elif req.type == "thinking":
+        path = root / "thinking_profile.json"
+        data = store.read_json(path)
+        if req.id_or_content in data.get("patterns", []):
+            data["patterns"].remove(req.id_or_content)
+            store.write_json(path, data)
+    elif req.type == "memory":
+        path = root / "memory.json"
+        data = store.read_json(path)
+        data["items"] = [x for x in data.get("items", []) if x.get("id") != req.id_or_content and x.get("content") != req.id_or_content]
+        store.write_json(path, data)
+    return {"status": "success"}
 
 @app.get("/api/brain/proposals", dependencies=[Depends(require_auth)])
 def list_learning_proposals(

@@ -186,6 +186,39 @@ class JsonStore:
         self.write_json(registry_path, registry)
         return item
 
+    def rename_workspace(self, workspace_id: str, new_name: str) -> dict[str, Any]:
+        clean_name = " ".join(new_name.split()).strip()
+        if not clean_name or len(clean_name) > 60:
+            raise ValueError("Nama workspace harus 1-60 karakter")
+        registry_path = self.root / "system" / "workspaces.json"
+        with self.lock:
+            registry = self.read_json(registry_path)
+            found = None
+            for item in registry.get("items", []):
+                if item["id"] == workspace_id:
+                    item["name"] = clean_name
+                    item["updated_at"] = now_iso()
+                    found = item
+                    break
+            if not found:
+                raise KeyError("Workspace tidak ditemukan")
+            self.write_json(registry_path, registry)
+        return found
+
+    def delete_workspace(self, workspace_id: str) -> None:
+        if workspace_id == "writing":
+            raise ValueError("Tidak dapat menghapus workspace default")
+        registry_path = self.root / "system" / "workspaces.json"
+        with self.lock:
+            registry = self.read_json(registry_path)
+            original_len = len(registry.get("items", []))
+            registry["items"] = [item for item in registry.get("items", []) if item["id"] != workspace_id]
+            if len(registry["items"]) == original_len:
+                raise KeyError("Workspace tidak ditemukan")
+            self.write_json(registry_path, registry)
+            if self.active_workspace() == workspace_id:
+                self.set_active_workspace("writing")
+
     def list_entities(self, workspace_id: str, folder: str) -> list[dict[str, Any]]:
         path = self.workspace_path(workspace_id) / folder
         items = []
