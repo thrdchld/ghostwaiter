@@ -185,7 +185,7 @@ function showView(view) {
   $$(".nav-item").forEach(node => node.classList.toggle("active", node.dataset.view === view));
   localStorage.setItem("ghostwriter:activeView", view);
   if (view === "brain") loadBrain();
-  if (view === "menu") Promise.all([loadModelStatus(), loadSyncStatus()]);
+  if (view === "menu") Promise.all([loadSyncStatus()]);
 }
 
 async function initialize() {
@@ -213,7 +213,7 @@ async function initialize() {
   const lastView = localStorage.getItem("ghostwriter:activeView") || "chat";
   showView(lastView);
   await loadWorkspaces();
-  await Promise.all([loadModelStatus(), loadSyncStatus()]);
+  await Promise.all([loadSyncStatus()]);
   restoreLocalDraft();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/service-worker.js");
 }
@@ -767,14 +767,7 @@ async function loadReferences() {
   } catch (_) {}
 }
 
-async function loadModelStatus() {
-  try {
-    const data = await jsonApi("/api/model/status");
-    $("#model-status").className = `status-pill ${data.configured ? "ok" : "error"}`;
-    $("#model-status span").textContent = data.configured ? "AI" : "No token";
-    $("#model-detail").textContent = data.active_model;
-  } catch (_) {}
-}
+
 
 async function loadSyncStatus() {
   try {
@@ -786,108 +779,7 @@ async function loadSyncStatus() {
   } catch (_) {}
 }
 
-async function showModelSheet() {
-  const status = await jsonApi("/api/model/status");
-  openSheet("Model AI", `
-    <div id="model-chain"></div>
-    <div class="model-search"><input id="model-query" placeholder="Cari model di Hugging Face"><button id="model-search-button" class="button primary compact">Cari</button></div>
-    <div id="model-results" class="model-results"></div>`);
-  renderModelChain(status);
-  $("#model-search-button").onclick = searchModels;
-  $("#model-query").onkeydown = event => { if (event.key === "Enter") searchModels(); };
-}
 
-function renderModelChain(status) {
-  $("#model-chain").innerHTML = status.fallback_chain.map((model, index) => `
-    <div class="model-row">
-      <div class="sheet-option"><span><strong>${escapeHtml(model)}</strong><small>${index === 0 ? "Default" : `Fallback ${index}`}${model === status.active_model ? " · aktif" : ""}</small></span></div>
-      <div class="row-actions">
-        <button class="mini-button test-model" data-model="${escapeHtml(model)}">Test</button>
-        ${index > 0 ? `${index > 1 ? `<button class="mini-button move-model" data-index="${index}" data-delta="-1">↑</button>` : ""}<button class="mini-button default-model" data-model="${escapeHtml(model)}">Default</button><button class="mini-button danger remove-model" data-model="${escapeHtml(model)}">×</button>` : ""}
-        ${index > 0 && index < status.fallback_chain.length - 1 ? `<button class="mini-button move-model" data-index="${index}" data-delta="1">↓</button>` : ""}
-      </div>
-    </div>`).join("");
-  $$(".test-model").forEach(button => button.onclick = () => testModel(button.dataset.model, button));
-  $$(".default-model").forEach(button => button.onclick = () => setDefaultModel(button.dataset.model));
-  $$(".remove-model").forEach(button => button.onclick = () => removeModel(button.dataset.model));
-  $$(".move-model").forEach(button => button.onclick = () => moveModel(status.fallback_chain, Number(button.dataset.index), Number(button.dataset.delta)));
-}
-
-async function refreshModelSheet() {
-  const status = await jsonApi("/api/model/status");
-  renderModelChain(status);
-  loadModelStatus();
-}
-
-async function searchModels() {
-  const query = $("#model-query").value.trim();
-  if (query.length < 2) return toast("Enter at least 2 characters");
-  $("#model-search-button").disabled = true;
-  $("#model-results").innerHTML = "<p>Mencari...</p>";
-  try {
-    const data = await jsonApi(`/api/model/search?query=${encodeURIComponent(query)}`);
-    $("#model-results").innerHTML = data.items.map(item => `
-      <article class="model-result">
-        <strong>${escapeHtml(item.id)}</strong>
-        <small>${Number(item.downloads || 0).toLocaleString("id-ID")} downloads · ${Number(item.likes || 0).toLocaleString("id-ID")} likes${item.gated ? " · gated" : ""}</small>
-        <div class="row-actions">
-          <button class="mini-button search-test" data-model="${escapeHtml(item.id)}">Test</button>
-          <button class="mini-button primary search-default" data-model="${escapeHtml(item.id)}">Jadikan default</button>
-          <button class="mini-button search-fallback" data-model="${escapeHtml(item.id)}">Tambah fallback</button>
-        </div>
-      </article>`).join("") || "<p>Tidak ada model ditemukan.</p>";
-    $$(".search-test").forEach(button => button.onclick = () => testModel(button.dataset.model, button));
-    $$(".search-default").forEach(button => button.onclick = () => setDefaultModel(button.dataset.model));
-    $$(".search-fallback").forEach(button => button.onclick = () => addFallbackModel(button.dataset.model));
-  } catch (error) {
-    $("#model-results").innerHTML = "";
-    toast(error.message);
-  } finally {
-    $("#model-search-button").disabled = false;
-  }
-}
-
-async function testModel(model, button) {
-  const original = button.textContent;
-  button.disabled = true;
-  button.textContent = "...";
-  try {
-    await jsonApi("/api/model/test", {method: "POST", body: {model_id: model}});
-    toast(`${model} is available`);
-  } catch (error) {
-    toast(error.message);
-  } finally {
-    button.disabled = false;
-    button.textContent = original;
-  }
-}
-
-async function setDefaultModel(model) {
-  await jsonApi("/api/model/set-default", {method: "POST", body: {model_id: model}});
-  await refreshModelSheet();
-  toast("Default model updated");
-}
-
-async function addFallbackModel(model) {
-  await jsonApi("/api/model/add-fallback", {method: "POST", body: {model_id: model}});
-  await refreshModelSheet();
-  toast("Model added to fallback");
-}
-
-async function removeModel(model) {
-  await jsonApi("/api/model/remove", {method: "POST", body: {model_id: model}});
-  await refreshModelSheet();
-  toast("Model removed from fallback");
-}
-
-async function moveModel(chain, index, delta) {
-  const target = index + delta;
-  if (target < 0 || target >= chain.length) return;
-  const reordered = [...chain];
-  [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
-  await jsonApi("/api/model/reorder", {method: "POST", body: {models: reordered}});
-  await refreshModelSheet();
-}
 
 async function manualSync() {
   if (!(await showConfirm("Sync ke GitHub sekarang?"))) return;
@@ -1084,8 +976,7 @@ function bindEvents() {
 
   $("#learn-raw-button").onclick = learnRawWriting;
   $("#reference-button").onclick = searchReferences;
-  $("#model-button").onclick = showModelSheet;
-  $("#model-status").onclick = showModelSheet;
+
   $("#sync-status").onclick = manualSync;
   $("#manual-sync").onclick = manualSync;
 
@@ -1104,7 +995,7 @@ function bindEvents() {
       $("#login-screen").classList.add("hidden");
       $("#app").classList.remove("hidden");
       await loadWorkspaces();
-      await Promise.all([loadModelStatus(), loadSyncStatus()]);
+      await Promise.all([loadSyncStatus()]);
       restoreLocalDraft();
       if ("serviceWorker" in navigator) navigator.serviceWorker.register("/service-worker.js");
     } catch (error) {
