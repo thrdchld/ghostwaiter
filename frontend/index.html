@@ -24,18 +24,32 @@
   </div>
 
   <div id="app" class="app-shell hidden">
-    <header class="topbar">
-      <div class="app-branding" style="font-family: Georgia, serif; font-size: 20px; font-weight: bold; margin-left: 8px;">GhostWriter</div>
-      <div class="status-cluster">
-        <button id="workspace-button" class="workspace-button" type="button" style="background:var(--paper);border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:6px 12px;line-height:1.1;">
-          <span class="eyebrow" style="font-size:9px;margin-bottom:2px">Workspace</span><strong id="workspace-name" style="font-size:14px;margin-top:0">Writing</strong>
-        </button>
-        <button id="model-status" class="status-pill" type="button"><i></i><span>AI</span></button>
-        <button id="sync-status" class="status-pill" type="button"><i></i><span>Local</span></button>
+    <aside id="sidebar" class="sidebar expanded">
+      <div class="sidebar-header">
+        <button id="sidebar-toggle" class="icon-button" aria-label="Toggle Menu" style="padding:0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+        <div class="app-branding" style="font-family: Georgia, serif; font-size: 20px; font-weight: bold; margin-left: 12px; white-space: nowrap;">GhostWriter</div>
       </div>
-    </header>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="chat" type="button"><span>◌</span><span class="nav-label">Chat</span></button>
+        <button class="nav-item" data-view="write" type="button"><span>✎</span><span class="nav-label">Write</span></button>
+        <button class="nav-item" data-view="brain" type="button"><span>◇</span><span class="nav-label">Brain</span></button>
+        <button class="nav-item" data-view="menu" type="button"><span>☰</span><span class="nav-label">Menu</span></button>
+      </nav>
+    </aside>
 
-    <main class="main">
+    <div class="main-wrapper">
+      <header class="topbar">
+        <div style="flex:1"></div>
+        <div class="status-cluster">
+          <button id="workspace-button" class="workspace-button" type="button" style="background:var(--paper);border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:6px 12px;line-height:1.1;">
+            <span class="eyebrow" style="font-size:9px;margin-bottom:2px">Workspace</span><strong id="workspace-name" style="font-size:14px;margin-top:0">Writing</strong>
+          </button>
+          <button id="model-status" class="status-pill" type="button"><i></i><span>AI</span></button>
+          <button id="sync-status" class="status-pill" type="button"><i></i><span>Local</span></button>
+        </div>
+      </header>
+
+      <main class="main">
       <section id="view-chat" class="view active" aria-label="Chat">
         <div class="section-heading">
           <div><span class="eyebrow">Conversation</span><h1 id="chat-title">Obrolan baru</h1></div>
@@ -128,6 +142,7 @@
       <section id="view-menu" class="view" aria-label="Menu">
         <div class="section-heading"><div><span class="eyebrow">System</span><h1>Menu</h1></div></div>
         <div class="settings-list">
+          <button id="theme-button" class="setting-row" type="button"><span><strong>Tema Tampilan</strong><small id="theme-detail">Sistem (Otomatis)</small></span><b>◑</b></button>
           <button id="model-button" class="setting-row" type="button"><span><strong>Model AI</strong><small id="model-detail">Memuat...</small></span><b>›</b></button>
           <button id="manual-sync" class="setting-row" type="button"><span><strong>Sync GitHub</strong><small id="sync-detail">Belum dikonfigurasi</small></span><b>↻</b></button>
           <button id="import-button" class="setting-row" type="button"><span><strong>Import data offline</strong><small>Pulihkan data JSON dari perangkat</small></span><b>↑</b></button>
@@ -139,14 +154,8 @@
         <p class="version">GhostWriter v1.0 · Hugging Face Space</p>
       </section>
     </main>
-
-    <nav class="bottom-nav">
-      <button class="nav-item active" data-view="chat" type="button"><span>◌</span>Chat</button>
-      <button class="nav-item" data-view="write" type="button"><span>✎</span>Write</button>
-      <button class="nav-item" data-view="brain" type="button"><span>◇</span>Brain</button>
-      <button class="nav-item" data-view="menu" type="button"><span>☰</span>Menu</button>
-    </nav>
   </div>
+</div>
 
   <div id="backdrop" class="backdrop hidden"></div>
   <aside id="sheet" class="sheet hidden" aria-modal="true">

@@ -188,12 +188,55 @@ async function initialize() {
     return;
   }
   $("#app").classList.remove("hidden");
+  
+  applyTheme();
+  const sidebarState = localStorage.getItem("ghostwriter:sidebar") || "expanded";
+  if (sidebarState === "minimized") {
+    $("#sidebar").classList.add("minimized");
+    $("#sidebar").classList.remove("expanded");
+    $("#app").classList.add("sidebar-minimized");
+  } else {
+    $("#app").classList.remove("sidebar-minimized");
+  }
+
   const lastView = localStorage.getItem("ghostwriter:activeView") || "chat";
   showView(lastView);
   await loadWorkspaces();
   await Promise.all([loadModelStatus(), loadSyncStatus()]);
   restoreLocalDraft();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/service-worker.js");
+}
+
+let theme = localStorage.getItem("ghostwriter:theme") || "system";
+
+function applyTheme() {
+  if (theme === "system") {
+    document.documentElement.removeAttribute("data-theme");
+    if ($("#theme-detail")) $("#theme-detail").textContent = "Sistem (Otomatis)";
+  } else if (theme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+    if ($("#theme-detail")) $("#theme-detail").textContent = "Gelap (Dark)";
+  } else {
+    document.documentElement.setAttribute("data-theme", "light");
+    if ($("#theme-detail")) $("#theme-detail").textContent = "Terang (Light)";
+  }
+  localStorage.setItem("ghostwriter:theme", theme);
+}
+
+function cycleTheme() {
+  if (theme === "system") theme = "dark";
+  else if (theme === "dark") theme = "light";
+  else theme = "system";
+  applyTheme();
+}
+
+function toggleSidebar() {
+  const sidebar = $("#sidebar");
+  sidebar.classList.toggle("minimized");
+  sidebar.classList.toggle("expanded");
+  const isMinimized = sidebar.classList.contains("minimized");
+  localStorage.setItem("ghostwriter:sidebar", isMinimized ? "minimized" : "expanded");
+  $("#app").classList.toggle("sidebar-minimized", isMinimized);
 }
 
 async function loadWorkspaces() {
@@ -850,7 +893,25 @@ async function manualSync() {
 
 
 function bindEvents() {
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.shiftKey) {
+      const el = e.target;
+      if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+        e.preventDefault();
+        const form = el.closest("form");
+        if (form) form.requestSubmit();
+        else if (el.id === "write-prompt") $("#generate-button").click();
+        else if (el.id === "raw-writing") $("#learn-raw-button").click();
+        else if (el.id === "compare-original" || el.id === "compare-edited") $("#compare-button").click();
+        else if (el.id === "reference-query") $("#reference-button").click();
+        else if (el.classList.contains("proposal-content")) el.closest(".proposal-card").querySelector(".approve-proposal").click();
+      }
+    }
+  });
+
   $$(".nav-item").forEach(button => button.onclick = () => showView(button.dataset.view));
+  if ($("#sidebar-toggle")) $("#sidebar-toggle").onclick = toggleSidebar;
+  if ($("#theme-button")) $("#theme-button").onclick = cycleTheme;
   $("#workspace-button").onclick = showWorkspaceSheet;
   $("#sheet-close").onclick = closeSheet;
   $("#backdrop").onclick = closeSheet;
