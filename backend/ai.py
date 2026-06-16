@@ -58,7 +58,6 @@ class AIService:
                     json={
                         "model": model,
                         "messages": messages,
-                        "max_tokens": max_tokens,
                         "temperature": 0.7,
                         "stream": True,
                     },
@@ -107,7 +106,6 @@ class AIService:
                     json={
                         "model": model,
                         "messages": messages,
-                        "max_tokens": max_tokens,
                         "temperature": temperature,
                     },
                     timeout=120.0,

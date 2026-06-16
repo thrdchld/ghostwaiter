@@ -57,48 +57,48 @@
       <main class="main">
       <section id="view-chat" class="view active" aria-label="Chat">
         <div class="section-heading">
-          <div><span class="eyebrow">Conversation</span><h1 id="chat-title">New Chat</h1></div>
+          <div><span class="eyebrow">Percakapan</span><h1 id="chat-title">Chat Baru</h1></div>
           <div style="display: flex; gap: 8px;">
-            <button id="chat-list-button" class="icon-button" type="button" aria-label="Chat history"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
-            <button id="new-chat-button" class="icon-button" type="button" aria-label="New Chat"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="10" x2="15" y2="10"></line><line x1="12" y1="7" x2="12" y2="13"></line></svg></button>
+            <button id="chat-list-button" class="icon-button" type="button" aria-label="Riwayat Chat"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
+            <button id="new-chat-button" class="icon-button" type="button" aria-label="Chat Baru"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="10" x2="15" y2="10"></line><line x1="12" y1="7" x2="12" y2="13"></line></svg></button>
           </div>
         </div>
         <div id="chat-messages" class="chat-messages">
-          <div class="empty-state"><strong>Start with a thought.</strong><span>Discuss ideas, structure arguments, or ask for feedback.</span></div>
+          <div class="empty-state"><strong>Mulai dengan ide.</strong><span>Diskusikan konsep, susun argumen, atau minta umpan balik.</span></div>
         </div>
         <form id="chat-form" class="composer">
-          <textarea id="chat-input" rows="1" placeholder="Write a message..." required></textarea>
-          <button id="chat-send" class="send-button" type="submit" aria-label="Send">↑</button>
+          <textarea id="chat-input" rows="1" placeholder="Tulis pesan..." required></textarea>
+          <button id="chat-send" class="send-button" type="submit" aria-label="Kirim">↑</button>
         </form>
       </section>
 
       <section id="view-write" class="view" aria-label="Write">
         <div class="section-heading">
-          <div><span class="eyebrow">Writing desk</span><h1>Write</h1></div>
-          <button id="draft-list-button" class="text-button" type="button">Drafts</button>
+          <div><span class="eyebrow">Meja Tulis</span><h1>Tulis</h1></div>
+          <button id="draft-list-button" class="text-button" type="button">Draft</button>
         </div>
         <div class="prompt-card">
-          <textarea id="write-prompt" rows="3" placeholder="What do you want to write?"></textarea>
+          <textarea id="write-prompt" rows="3" placeholder="Apa yang ingin Anda tulis?"></textarea>
           <div class="prompt-actions">
             <div id="write-mode" class="tab-row" style="margin: 0; padding: 0;">
-              <button class="chip active" data-mode="write" type="button">Write</button>
-              <button class="chip" data-mode="rewrite" type="button">Rewrite</button>
-              <button class="chip" data-mode="paraphrase" type="button">Paraphrase</button>
+              <button class="chip active" data-mode="write" type="button">Tulis</button>
+              <button class="chip" data-mode="rewrite" type="button">Tulis Ulang</button>
+              <button class="chip" data-mode="paraphrase" type="button">Parafrase</button>
             </div>
             <button id="generate-button" class="button primary compact" type="button">Generate</button>
           </div>
         </div>
         <div class="editor-card">
-          <input id="draft-title" class="title-input" value="Untitled" aria-label="Draft title">
-          <textarea id="draft-content" class="document-editor" placeholder="AI generation and your writing will appear here..."></textarea>
+          <input id="draft-title" class="title-input" value="Tanpa Judul" aria-label="Draft title">
+          <textarea id="draft-content" class="document-editor" placeholder="Hasil generate AI dan tulisan Anda akan muncul di sini..."></textarea>
           <div class="editor-footer">
             <div>
-              <span id="save-state">Unsaved</span>
-              <span id="word-count" class="word-count">0 words · 0 characters</span>
+              <span id="save-state">Belum disimpan</span>
+              <span id="word-count" class="word-count">0 kata · 0 karakter</span>
             </div>
             <div>
-              <button id="copy-button" class="text-button" type="button">Copy</button>
-              <button id="train-button" class="text-button accent" type="button">Train</button>
+              <button id="copy-button" class="text-button" type="button">Salin</button>
+              <button id="train-button" class="text-button accent" type="button">Latih</button>
             </div>
           </div>
         </div>
@@ -106,27 +106,27 @@
 
       <section id="view-brain" class="view" aria-label="Brain">
         <div class="section-heading">
-          <div><span class="eyebrow">Personal intelligence</span><h1>Brain</h1></div>
+          <div><span class="eyebrow">Kecerdasan Personal</span><h1>Brain</h1></div>
           <button id="refresh-brain" class="icon-button" type="button" aria-label="Refresh">↻</button>
         </div>
         <div class="brain-stats">
-          <article><strong id="style-count">0</strong><span>Style rules</span></article>
-          <article><strong id="thinking-count">0</strong><span>Thinking patterns</span></article>
-          <article><strong id="revision-count">0</strong><span>Revisions</span></article>
+          <article><strong id="style-count">0</strong><span>Aturan gaya bahasa</span></article>
+          <article><strong id="thinking-count">0</strong><span>Pola pikir</span></article>
+          <article><strong id="revision-count">0</strong><span>Revisi</span></article>
         </div>
         <div class="tab-row">
           <button class="chip" data-brain-tab="raw" type="button">Teach</button>
           <button class="chip" data-brain-tab="compare" type="button">Compare</button>
           <button class="chip active" data-brain-tab="style" type="button">Style</button>
           <button class="chip" data-brain-tab="thinking" type="button">Thinking</button>
-          <button class="chip" data-brain-tab="proposals" type="button">Proposals <span id="proposal-count"></span></button>
           <button class="chip" data-brain-tab="references" type="button">References</button>
+          <button class="chip" data-brain-tab="proposals" type="button">Proposals <span id="proposal-count"></span></button>
         </div>
         <div id="brain-list" class="insight-list"></div>
         <div id="brain-teach" class="teach-card hidden">
-          <label for="raw-writing">Original writing sample</label>
-          <textarea id="raw-writing" rows="9" placeholder="Paste your writing here so GhostWriter can learn its style..."></textarea>
-          <button id="learn-raw-button" class="button primary" type="button">Analyze writing</button>
+          <label for="raw-writing">Sampel tulisan asli</label>
+          <textarea id="raw-writing" rows="9" placeholder="Tempel tulisan Anda di sini agar GhostWriter bisa mempelajari gayanya..."></textarea>
+          <button id="learn-raw-button" class="button primary" type="button">Analisis tulisan</button>
         </div>
         <div id="brain-compare" class="teach-card hidden">
           <label>Original Text</label>
@@ -140,21 +140,21 @@
           </div>
         </div>
         <div id="reference-search" class="teach-card hidden">
-          <label for="reference-query">Search internet references</label>
-          <div class="inline-form"><input id="reference-query" placeholder="Topic or keyword"><button id="reference-button" class="button primary compact" type="button">Search</button></div>
+          <label for="reference-query">Cari referensi internet</label>
+          <div class="inline-form"><input id="reference-query" placeholder="Topik atau kata kunci"><button id="reference-button" class="button primary compact" type="button">Cari</button></div>
           <div id="reference-list" class="reference-list"></div>
         </div>
         <div id="proposal-list" class="proposal-list hidden"></div>
       </section>
 
       <section id="view-menu" class="view" aria-label="Settings">
-        <div class="section-heading"><div><span class="eyebrow">System</span><h1>Settings</h1></div></div>
+        <div class="section-heading"><div><span class="eyebrow">Sistem</span><h1>Pengaturan</h1></div></div>
         <div class="settings-list">
-          <button id="theme-button" class="setting-row" type="button"><span><strong>Theme</strong><small id="theme-detail">System (Auto)</small></span><b>◑</b></button>
+          <button id="theme-button" class="setting-row" type="button"><span><strong>Tema</strong><small id="theme-detail">Sistem (Otomatis)</small></span><b>◑</b></button>
           
           <div class="setting-row" style="flex-direction: column; align-items: stretch; gap: 16px; cursor: default;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span><strong>AI Provider</strong><small>Select provider and load models</small></span>
+              <span><strong>Provider AI</strong><small>Pilih provider dan muat model</small></span>
             </div>
             <div style="display: flex; flex-direction: column; gap: 12px;">
               <div style="display: flex; gap: 8px; align-items: center;">
@@ -171,19 +171,19 @@
               </div>
               <div id="models-browser" class="hidden" style="margin-top: 4px;">
                 <div style="margin-bottom: 12px; font-size: 13px;">
-                  Active Model: <strong id="active-model-display">None</strong>
+                  Model Aktif: <strong id="active-model-display">Belum ada</strong>
                 </div>
-                <input type="text" id="model-search" placeholder="Search models..." style="width: 100%; margin-bottom: 12px;">
+                <input type="text" id="model-search" placeholder="Cari model..." style="width: 100%; margin-bottom: 12px;">
                 <div id="models-list" style="display: grid; gap: 8px; max-height: 240px; overflow-y: auto;"></div>
               </div>
             </div>
           </div>
-          <button id="manual-sync" class="setting-row" type="button"><span><strong>GitHub Sync</strong><small id="sync-detail">Not configured</small></span><b>↻</b></button>
-          <button id="import-button" class="setting-row" type="button"><span><strong>Import Offline Data</strong><small>Restore JSON data from device</small></span><b>↑</b></button>
-          <a class="setting-row" href="/api/export" id="export-button"><span><strong>Export Offline Data</strong><small>Download all JSON data to device</small></span><b>↓</b></a>
+          <button id="manual-sync" class="setting-row" type="button"><span><strong>Sinkronisasi GitHub</strong><small id="sync-detail">Belum dikonfigurasi</small></span><b>↻</b></button>
+          <button id="import-button" class="setting-row" type="button"><span><strong>Impor Data Offline</strong><small>Pulihkan data JSON dari perangkat</small></span><b>↑</b></button>
+          <a class="setting-row" href="/api/export" id="export-button"><span><strong>Ekspor Data Offline</strong><small>Unduh semua data JSON ke perangkat</small></span><b>↓</b></a>
           <input type="file" id="import-file" accept=".zip" class="hidden">
-          <button id="install-button" class="setting-row hidden" type="button"><span><strong>Install App</strong><small>Add GhostWriter to home screen</small></span><b>+</b></button>
-          <button id="logout-button" class="setting-row danger-row" type="button"><span><strong>Sign Out</strong><small>Clear session on this device</small></span><b>›</b></button>
+          <button id="install-button" class="setting-row hidden" type="button"><span><strong>Instal Aplikasi</strong><small>Tambahkan GhostWriter ke layar utama</small></span><b>+</b></button>
+          <button id="logout-button" class="setting-row danger-row" type="button"><span><strong>Keluar</strong><small>Hapus sesi di perangkat ini</small></span><b>›</b></button>
         </div>
         <p class="version">GhostWriter v1.5 · AI Powered</p>
       </section>

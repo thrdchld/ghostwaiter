@@ -208,18 +208,19 @@ def workspace_id(value: str | None) -> str:
 
 def _brain_system_prompt(workspace: str, purpose: str, context: str = "") -> str:
     base = (
-        "You are GhostWriter, a personal writing assistant. Reply in the user's language. "
-        "Do not fabricate facts, do not execute system commands, and prioritize clear writing."
+        "Anda adalah GhostWriter, asisten penulis pribadi cerdas. Tujuan Anda adalah membantu pengguna menulis, merevisi, dan mengembangkan ide. "
+        "Selalu balas dalam bahasa Indonesia yang natural, namun Anda boleh menggunakan kata serapan bahasa Inggris untuk istilah populer (seperti 'draft', 'generate', 'chat', dll). "
+        "Jangan memalsukan fakta, jangan mengeksekusi perintah sistem."
     )
     modes = {
-        "chat": "Help the user think and discuss naturally.",
-        "write": "Write the final result directly without preamble.",
-        "rewrite": "Rewrite the text per the instruction without explaining the process.",
-        "paraphrase": "Paraphrase while preserving the main meaning.",
+        "chat": "Bantu pengguna berpikir dan berdiskusi secara natural dan mengalir.",
+        "write": "Tulis hasil akhir secara langsung tanpa basa-basi pembuka.",
+        "rewrite": "Tulis ulang teks sesuai instruksi tanpa menjelaskan prosesnya.",
+        "paraphrase": "Parafrase teks sambil mempertahankan makna aslinya.",
     }
     formatting = (
-        "Use clean Markdown where helpful: headings, lists, emphasis, quotes, and code blocks. "
-        "Do not display Markdown symbols that serve no purpose."
+        "PENTING: Jangan gunakan simbol pemformatan Markdown (seperti *, **, ***, ###, atau ---) dalam tulisan Anda. "
+        "Gunakan teks biasa dengan paragraf dan indentasi yang rapi."
     )
     return f"{base}\n{modes.get(purpose, modes['write'])}\n{formatting}\n\n{context or ai_service.context(workspace)}".strip()
 
@@ -779,7 +780,7 @@ def list_learning_proposals(
     status: str = Query(default="pending", pattern="^(pending|approved|rejected|all)$"),
 ) -> dict[str, Any]:
     workspace = workspace_id(workspace_id_query)
-    items = store.read_json(_proposal_file(workspace)).get("items", [])
+    items = store.read_json(store.workspace_path(workspace) / "brain" / "learning_proposals.json").get("items", [])
     if status != "all":
         items = [item for item in items if item.get("status", "pending") == status]
     return {"items": items}
@@ -788,7 +789,7 @@ def list_learning_proposals(
 @app.post("/api/brain/proposals/approve", dependencies=[Depends(require_auth)])
 def approve_learning_proposal(req: LearningProposalRequest) -> dict[str, Any]:
     workspace = workspace_id(req.workspace_id)
-    path = _proposal_file(workspace)
+    path = store.workspace_path(workspace) / "brain" / "learning_proposals.json"
     data = store.read_json(path)
     proposal = next((item for item in data["items"] if item["id"] == req.proposal_id), None)
     if not proposal:
@@ -829,7 +830,7 @@ def approve_learning_proposal(req: LearningProposalRequest) -> dict[str, Any]:
 @app.post("/api/brain/proposals/reject", dependencies=[Depends(require_auth)])
 def reject_learning_proposal(req: LearningProposalRequest) -> dict[str, Any]:
     workspace = workspace_id(req.workspace_id)
-    path = _proposal_file(workspace)
+    path = store.workspace_path(workspace) / "brain" / "learning_proposals.json"
     data = store.read_json(path)
     proposal = next((item for item in data["items"] if item["id"] == req.proposal_id), None)
     if not proposal:

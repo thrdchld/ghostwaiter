@@ -1,4 +1,6 @@
 const $ = selector => document.querySelector(selector);
+let chatAbortController = null;
+let generateAbortController = null;
 const $$ = selector => [...document.querySelectorAll(selector)];
 
 const state = {
@@ -307,11 +309,11 @@ async function switchWorkspace(id) {
   restoreLocalDraft();
   closeSheet();
   await Promise.all([loadBrain(), loadSyncStatus()]);
-    toast("Workspace switched");
+    toast("Workspace diubah");
 }
 
 async function createWorkspace(customName = null) {
-  const name = customName || await showPrompt("New workspace name:");
+  const name = customName || await showPrompt("Nama workspace baru:");
   if (!name?.trim()) return;
   try {
     const result = await jsonApi("/api/workspace/create", {method: "POST", body: {name: name.trim()}});
@@ -341,20 +343,33 @@ async function sendChat(event) {
   event.preventDefault();
   const input = $("#chat-input");
   const message = input.value.trim();
+  
+  if (chatAbortController) {
+    chatAbortController.abort();
+    return;
+  }
+  
   if (!message) return;
   appendMessage("user", message);
   input.value = "";
   input.style.height = "auto";
   const assistant = appendMessage("assistant", "");
   let fullResponse = "";
-  $("#chat-send").disabled = true;
+  
+  const sendBtn = $("#chat-send");
+  sendBtn.textContent = "⏹";
+  sendBtn.setAttribute("aria-label", "Berhenti");
+  
+  chatAbortController = new AbortController();
+
   try {
     const response = await api("/api/chat/send", {
       method: "POST",
       body: {workspace_id: state.workspace, chat_id: state.currentChat, message},
+      signal: chatAbortController.signal,
     });
     state.currentChat = response.headers.get("X-Chat-Id");
-    if ($("#chat-title").textContent === "New Chat") $("#chat-title").textContent = message.slice(0, 60);
+    if ($("#chat-title").textContent === "Chat Baru") $("#chat-title").textContent = message.slice(0, 60);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     while (true) {
@@ -362,30 +377,35 @@ async function sendChat(event) {
       if (done) break;
       fullResponse += decoder.decode(value, {stream: true});
       assistant.querySelector(".msg-content").innerHTML = renderMarkdown(fullResponse);
-      // Smooth auto-scroll: only scroll if user is near the bottom
+      // Smooth auto-scroll: forcefully scroll to bottom during streaming
       const msgs = $("#chat-messages");
-      const nearBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 120;
-      if (nearBottom) msgs.scrollTo({ top: msgs.scrollHeight, behavior: "smooth" });
+      msgs.scrollTop = msgs.scrollHeight;
     }
   } catch (error) {
-    if (error.message.includes("Semua model inference gagal")) {
-      if (!fullResponse.trim()) assistant.querySelector(".msg-content").innerHTML = renderMarkdown("*(AI network is busy or quota exceeded, please try again later)*");
+    if (error.name === "AbortError") {
+      toast("Dibatalkan");
+    } else if (error.message.includes("Semua model inference gagal")) {
+      if (!fullResponse.trim()) assistant.querySelector(".msg-content").innerHTML = renderMarkdown("*(Jaringan AI sibuk atau kuota habis, silakan coba lagi nanti)*");
     } else {
       if (fullResponse.trim()) {
-        toast(`Connection lost: ${error.message}`, "error");
+        toast(`Koneksi terputus: ${error.message}`, "error");
       } else {
         assistant.querySelector(".msg-content").innerHTML = renderMarkdown(`**Error:** ${error.message}`);
       }
     }
   } finally {
-    $("#chat-send").disabled = false;
+    chatAbortController = null;
+    const sendBtn = $("#chat-send");
+    sendBtn.textContent = "↑";
+    sendBtn.setAttribute("aria-label", "Kirim");
+    sendBtn.disabled = false;
     setTimeout(async () => {
       const previous = state.brain?.pending_proposals || 0;
       try {
         const profile = await jsonApi(`/api/brain/profile?workspace_id=${encodeURIComponent(state.workspace)}`);
         state.brain = profile;
         $("#proposal-count").textContent = profile.pending_proposals ? `(${profile.pending_proposals})` : "";
-        if (profile.pending_proposals > previous) toast("New learning proposals to review");
+        if (profile.pending_proposals > previous) toast("Ada proposal pembelajaran baru untuk ditinjau");
       } catch (_) {}
     }, 4500);
   }
@@ -393,13 +413,13 @@ async function sendChat(event) {
 
 function resetChat() {
   state.currentChat = null;
-  $("#chat-title").textContent = "New Chat";
+  $("#chat-title").textContent = "Chat Baru";
   $("#chat-messages").innerHTML = `<div class="empty-state"><strong>Start with a thought.</strong><span>Discuss ideas, structure arguments, or request feedback.</span></div>`;
 }
 
 async function showChatList() {
   try {
-    openSheet("Chat history", `<div class="sheet-tabs"><button id="active-chat-tab" class="chip active">Active</button><button id="archive-chat-tab" class="chip">Archive</button></div><div id="chat-list-content"></div>`);
+    openSheet("Riwayat Chat", `<div class="sheet-tabs"><button id="active-chat-tab" class="chip active">Active</button><button id="archive-chat-tab" class="chip">Archive</button></div><div id="chat-list-content"></div>`);
     $("#active-chat-tab").onclick = () => renderChatHistory(false);
     $("#archive-chat-tab").onclick = () => renderChatHistory(true);
     
@@ -423,7 +443,7 @@ async function renderChatHistory(archived) {
           ? `<button class="mini-button restore-chat" data-id="${escapeHtml(item.id)}">Restore</button><button class="mini-button danger purge-chat" data-id="${escapeHtml(item.id)}">Delete</button>`
           : `<button class="mini-button rename-chat" data-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title)}">Edit</button><button class="mini-button danger archive-chat" data-id="${escapeHtml(item.id)}">Archive</button>`}
       </div>
-    </div>`).join("") || `<p class="empty-state" style="min-height:180px">${archived ? "Archive is empty." : "No history yet."}</p>`;
+    </div>`).join("") || `<p class="empty-state" style="min-height:180px">${archived ? "Arsip kosong." : "Belum ada riwayat."}</p>`;
   $$(".chat-option").forEach(button => button.onclick = () => loadChat(button.dataset.id));
   $$(".rename-chat").forEach(button => button.onclick = () => renameChat(button.dataset.id, button.dataset.title));
   $$(".archive-chat").forEach(button => button.onclick = () => archiveChat(button.dataset.id));
@@ -440,7 +460,7 @@ async function renameChat(id, oldTitle) {
 }
 
 async function archiveChat(id) {
-  if (!(await showConfirm("Archive this chat?"))) return;
+  if (!(await showConfirm("Arsipkan chat ini?"))) return;
   await jsonApi("/api/chat/archive", {method: "POST", body: {workspace_id: state.workspace, chat_id: id}});
   if (state.currentChat === id) resetChat();
   await renderChatHistory(false);
@@ -449,11 +469,11 @@ async function archiveChat(id) {
 async function restoreChat(id) {
   await jsonApi("/api/chat/restore", {method: "POST", body: {workspace_id: state.workspace, chat_id: id}});
   await renderChatHistory(true);
-  toast("Chat restored");
+  toast("Chat dipulihkan");
 }
 
 async function purgeChat(id) {
-  if (!(await showConfirm("Permanently delete this chat? An internal backup will be created but won't be accessible from the UI."))) return;
+  if (!(await showConfirm("Hapus chat ini secara permanen?"))) return;
   await jsonApi("/api/chat/delete-permanent", {method: "POST", body: {workspace_id: state.workspace, chat_id: id}});
   await renderChatHistory(true);
 }
@@ -468,19 +488,26 @@ async function loadChat(id) {
 }
 
 async function generateWriting() {
+  if (generateAbortController) {
+    generateAbortController.abort();
+    return;
+  }
   const prompt = $("#write-prompt").value.trim();
-  if (!prompt) return toast("Write an instruction first");
+  if (!prompt) return toast("Tulis instruksi terlebih dahulu");
   const button = $("#generate-button");
-  button.disabled = true;
-  button.textContent = "Generating...";
+  button.textContent = "Berhenti";
   $("#draft-content").value = "";
   state.originalAiText = "";
+  
+  generateAbortController = new AbortController();
+
   try {
     const activeModeNode = document.querySelector("#write-mode .chip.active");
     const mode = activeModeNode ? activeModeNode.dataset.mode : "write";
     const response = await api("/api/ai/generate", {
       method: "POST",
       body: {workspace_id: state.workspace, prompt, mode},
+      signal: generateAbortController.signal,
     });
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -497,12 +524,15 @@ async function generateWriting() {
     saveUndoState();
     updateWordCount();
   } catch (error) {
-    if (error.message.includes("All inference models failed")) {
-      toast("AI network is busy, please try again later");
+    if (error.name === "AbortError") {
+      toast("Dibatalkan");
+    } else if (error.message.includes("All inference models failed") || error.message.includes("Semua model inference gagal")) {
+      toast("Jaringan AI sibuk, silakan coba lagi nanti");
     } else {
       toast(error.message, "error");
     }
   } finally {
+    generateAbortController = null;
     button.disabled = false;
     button.textContent = "Generate";
   }
@@ -537,7 +567,7 @@ function restoreLocalDraft() {
     $("#draft-title").value = draft.title || "Untitled";
     $("#draft-content").value = draft.content || "";
     $("#write-prompt").value = draft.prompt || "";
-    $("#save-state").textContent = "Restored from device";
+    $("#save-state").textContent = "Dipulihkan dari perangkat";
   } catch (_) {}
   
   undoStack.length = 0;
@@ -548,7 +578,7 @@ function restoreLocalDraft() {
 
 function scheduleDraftSave() {
   saveDraftLocally();
-  $("#save-state").textContent = navigator.onLine ? "Saving..." : "Saved offline";
+  $("#save-state").textContent = navigator.onLine ? "Menyimpan..." : "Tersimpan offline";
   clearTimeout(state.saveTimer);
   state.saveTimer = setTimeout(saveDraftToServer, 1200);
 }
@@ -569,10 +599,10 @@ async function saveDraftToServer() {
       body: {workspace_id: state.workspace, draft_id: state.currentDraft, title, content},
     });
     saveDraftLocally();
-    $("#save-state").textContent = "Saved";
+    $("#save-state").textContent = "Tersimpan";
     loadSyncStatus();
   } catch (error) {
-    $("#save-state").textContent = "Saved offline";
+    $("#save-state").textContent = "Tersimpan offline";
   }
 }
 
@@ -592,18 +622,18 @@ async function loadDraft(id) {
   state.originalAiText = draft.content;
   $("#draft-title").value = draft.title;
   $("#draft-content").value = draft.content;
-  $("#save-state").textContent = "Saved";
+  $("#save-state").textContent = "Tersimpan";
   saveDraftLocally();
   closeSheet();
 }
 
 async function trainRevision() {
   const revised = $("#draft-content").value.trim();
-  if (!state.originalAiText || !revised) return toast("Generate writing then edit before Training");
-  if (revised === state.originalAiText.trim()) return toast("No revisions available to learn");
+  if (!state.originalAiText || !revised) return toast("Generate tulisan lalu edit sebelum Melatih");
+  if (revised === state.originalAiText.trim()) return toast("Tidak ada revisi untuk dipelajari");
   const button = $("#train-button");
   button.disabled = true;
-  button.textContent = "Learning...";
+  button.textContent = "Mempelajari...";
   try {
     const result = await jsonApi("/api/brain/learn/revision", {
       method: "POST",
@@ -669,12 +699,12 @@ async function decideProposal(button, approve) {
   const card = button.closest(".proposal-card");
   const body = {workspace_id: state.workspace, proposal_id: card.dataset.id};
   if (approve) body.content = card.querySelector(".proposal-content").value.trim();
-  if (approve && !body.content) return toast("Proposal content cannot be empty");
+  if (approve && !body.content) return toast("Konten proposal tidak boleh kosong");
   button.disabled = true;
   try {
     await jsonApi(`/api/brain/proposals/${approve ? "approve" : "reject"}`, {method: "POST", body});
     await Promise.all([loadProposals(), loadBrain()]);
-    toast(approve ? "Learning approved" : "Proposal rejected");
+    toast(approve ? "Pembelajaran disetujui" : "Proposal ditolak");
   } catch (error) {
     toast(error.message);
   }
@@ -682,7 +712,7 @@ async function decideProposal(button, approve) {
 
 async function learnRawWriting() {
   const content = $("#raw-writing").value.trim();
-  if (!content) return toast("Enter a writing sample");
+  if (!content) return toast("Masukkan sampel tulisan");
   const button = $("#learn-raw-button");
   button.disabled = true;
   button.textContent = "Menganalisis...";
@@ -699,14 +729,14 @@ async function learnRawWriting() {
     toast(error.message);
   } finally {
     button.disabled = false;
-    button.textContent = "Analyze writing";
+    button.textContent = "Analisis tulisan";
   }
 }
 
 async function compareRevision() {
   const original = $("#compare-original").value.trim();
   const edited = $("#compare-edited").value.trim();
-  if (!original || !edited) return toast("Fill in the original and edited texts");
+  if (!original || !edited) return toast("Isi teks asli dan teks yang diedit");
   const button = $("#compare-button");
   button.disabled = true;
   button.textContent = "Menganalisis...";
@@ -733,7 +763,7 @@ async function compareRevision() {
 async function commitCompare() {
   const button = $("#commit-compare-button");
   button.disabled = true;
-  button.textContent = "Saving...";
+  button.textContent = "Menyimpan...";
   const style_rules = [];
   const thinking_patterns = [];
   $$(".compare-proposal-content").forEach(el => {
@@ -747,7 +777,7 @@ async function commitCompare() {
     await jsonApi("/api/brain/commit-revision", {
       method: "POST", body: {workspace_id: state.workspace, analysis: {style_rules, thinking_patterns}}
     });
-    toast("Patterns successfully learned", "success");
+    toast("Pola berhasil dipelajari", "success");
     $("#compare-original").value = "";
     $("#compare-edited").value = "";
     $("#compare-results").classList.add("hidden");
@@ -802,18 +832,18 @@ async function loadSyncStatus() {
     const pill = $("#sync-status");
     pill.className = `status-pill ${data.queue_size ? "warn" : "ok"}`;
     pill.querySelector("span").textContent = data.queue_size ? `${data.queue_size} pending` : "Synced";
-    $("#sync-detail").textContent = data.configured ? `${data.queue_size} pending changes` : "GitHub secret not configured";
+    $("#sync-detail").textContent = data.configured ? `${data.queue_size} pending changes` : "Rahasia GitHub belum dikonfigurasi";
   } catch (_) {}
 }
 
 
 
 async function manualSync() {
-  if (!(await showConfirm("Sync to GitHub now?"))) return;
+  if (!(await showConfirm("Sinkronisasi ke GitHub sekarang?"))) return;
   try {
     $("#manual-sync").disabled = true;
     await jsonApi("/api/sync/run", {method: "POST"});
-    toast("Sync complete", "success");
+    toast("Sinkronisasi selesai", "success");
     await loadSyncStatus();
   } catch (error) {
     toast(error.message, "error");
@@ -825,7 +855,7 @@ async function manualSync() {
 
 
 function bindEvents() {
-  if ($("#model-status")) $("#model-status").onclick = () => { const provider = localStorage.getItem("ghostwriter:ai_provider") || "openrouter"; const m = localStorage.getItem("ghostwriter:openrouter_model"); const k = localStorage.getItem(`ghostwriter:key_${provider}`) || localStorage.getItem("ghostwriter:openrouter_key"); toast(m && k ? `${provider.toUpperCase()} · ${m}` : "No AI configured — go to Settings → AI Provider", m && k ? "success" : "error"); };
+  if ($("#model-status")) $("#model-status").onclick = () => { const provider = localStorage.getItem("ghostwriter:ai_provider") || "openrouter"; const m = localStorage.getItem("ghostwriter:openrouter_model"); const k = localStorage.getItem(`ghostwriter:key_${provider}`) || localStorage.getItem("ghostwriter:openrouter_key"); toast(m && k ? `${provider.toUpperCase()} · ${m}` : "AI belum dikonfigurasi — buka Pengaturan → Provider AI", m && k ? "success" : "error"); };
   if ($("#new-chat-button")) $("#new-chat-button").onclick = () => { resetChat(); closeSheet(); };
   document.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.shiftKey) {
@@ -886,9 +916,17 @@ function bindEvents() {
       return (data.data || []).map(m => ({ id: m.id, name: m.id }));
     },
     kilo: async (key) => {
-      const res = await fetch("https://api.kilo.ai/v1/models", { headers: { Authorization: `Bearer ${key}` } });
-      const data = await res.json();
-      return (data.data || []).map(m => ({ id: m.id, name: m.id }));
+      try {
+        const res = await fetch("https://api.kilo.ai/v1/models", { headers: { Authorization: `Bearer ${key}` } });
+        const data = await res.json();
+        return (data.data || []).map(m => ({ id: m.id, name: m.id }));
+      } catch (err) {
+        return [
+          {id: "kilo-1", name: "Kilo 1"}, 
+          {id: "kilo-search", name: "Kilo Search"}, 
+          {id: "kilo-reasoning", name: "Kilo Reasoning"}
+        ];
+      }
     },
   };
 
@@ -958,22 +996,22 @@ function bindEvents() {
   loadModelsBtn.onclick = async () => {
     const provider = providerSelect.value;
     const key = apiKeyInput.value.trim();
-    if (!key) return toast("Enter your API Key first", "error");
+    if (!key) return toast("Masukkan API Key Anda terlebih dahulu", "error");
 
     loadModelsBtn.disabled = true;
-    loadModelsBtn.textContent = "Loading...";
+    loadModelsBtn.textContent = "Memuat...";
     try {
       const fetcher = PROVIDER_MODEL_URLS[provider];
       if (!fetcher) throw new Error("Provider not supported");
       allModels = await fetcher(key);
       modelsBrowser?.classList.remove("hidden");
       renderModels();
-      toast(`Loaded ${allModels.length} models`, "success");
+      toast(`Berhasil memuat ${allModels.length} model`, "success");
     } catch (err) {
       toast(`Failed to load models: ${err.message}`, "error");
     } finally {
       loadModelsBtn.disabled = false;
-      loadModelsBtn.textContent = "Load";
+      loadModelsBtn.textContent = "Muat";
     }
   };
 
@@ -1022,7 +1060,7 @@ function bindEvents() {
   $("#import-file").onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    toast("Importing data...");
+    toast("Mengimpor data...");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -1032,7 +1070,7 @@ function bindEvents() {
       
       const response = await fetch("/api/import", { method: "POST", headers, body: formData });
       if (!response.ok) throw await response.json().catch(() => ({message: `HTTP ${response.status}`}));
-      toast("Import successful! Reloading...", "success");
+      toast("Impor berhasil! Memuat ulang...", "success");
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
       toast("Failed to import file: " + err.message, "error");
