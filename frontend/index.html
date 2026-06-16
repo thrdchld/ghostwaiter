@@ -15,10 +15,10 @@
     <form id="login-form" class="login-card">
       <div class="brand-mark">G</div>
       <h1>GhostWriter</h1>
-      <p>Masuk ke ruang menulis personal Anda.</p>
+      <p>Enter your personal writing space.</p>
       <label for="login-password">Password</label>
       <input id="login-password" type="password" autocomplete="current-password" required>
-      <button class="button primary" type="submit">Masuk</button>
+      <button class="button primary" type="submit">Sign In</button>
       <p id="login-error" class="error-text"></p>
     </form>
   </div>
@@ -27,7 +27,7 @@
     <aside id="sidebar" class="sidebar expanded">
       <div class="sidebar-header" style="justify-content: space-between;">
         <div class="app-branding" style="font-family: Georgia, serif; font-size: 20px; font-weight: bold; margin-left: 4px; white-space: nowrap;">GhostWriter</div>
-        <button id="sidebar-toggle" class="icon-button" aria-label="Toggle Menu" style="padding:0">
+        <button id="sidebar-toggle" class="icon-button" aria-label="Toggle Menu" style="padding:4px; flex-shrink: 0;">
           <svg id="icon-collapse" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M15 12H9"/><path d="M12 9l-3 3 3 3"/></svg>
           <svg id="icon-expand" class="hidden" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 12h6"/><path d="M12 9l3 3-3 3"/></svg>
         </button>
@@ -57,41 +57,41 @@
       <main class="main">
       <section id="view-chat" class="view active" aria-label="Chat">
         <div class="section-heading">
-          <div><span class="eyebrow">Conversation</span><h1 id="chat-title">Obrolan baru</h1></div>
-          <button id="chat-list-button" class="icon-button" type="button" aria-label="Riwayat chat"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
+          <div><span class="eyebrow">Conversation</span><h1 id="chat-title">New Chat</h1></div>
+          <button id="chat-list-button" class="icon-button" type="button" aria-label="Chat history"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
         </div>
         <div id="chat-messages" class="chat-messages">
-          <div class="empty-state"><strong>Mulai dari sebuah pemikiran.</strong><span>Diskusikan ide, susun argumen, atau minta umpan balik.</span></div>
+          <div class="empty-state"><strong>Start with a thought.</strong><span>Discuss ideas, structure arguments, or ask for feedback.</span></div>
         </div>
         <form id="chat-form" class="composer">
-          <textarea id="chat-input" rows="1" placeholder="Tulis pesan..." required></textarea>
-          <button id="chat-send" class="send-button" type="submit" aria-label="Kirim">↑</button>
+          <textarea id="chat-input" rows="1" placeholder="Write a message..." required></textarea>
+          <button id="chat-send" class="send-button" type="submit" aria-label="Send">↑</button>
         </form>
       </section>
 
       <section id="view-write" class="view" aria-label="Write">
         <div class="section-heading">
-          <div><span class="eyebrow">Writing desk</span><h1>Ruang Tulis</h1></div>
-          <button id="draft-list-button" class="text-button" type="button">Draft</button>
+          <div><span class="eyebrow">Writing desk</span><h1>Write</h1></div>
+          <button id="draft-list-button" class="text-button" type="button">Drafts</button>
         </div>
         <div class="prompt-card">
-          <textarea id="write-prompt" rows="3" placeholder="Apa yang ingin Anda tulis?"></textarea>
+          <textarea id="write-prompt" rows="3" placeholder="What do you want to write?"></textarea>
           <div class="prompt-actions">
-            <select id="write-mode" aria-label="Mode penulisan">
-              <option value="write">Tulis</option>
-              <option value="rewrite">Tulis ulang</option>
-              <option value="paraphrase">Parafrase</option>
+            <select id="write-mode" aria-label="Writing mode">
+              <option value="write">Write</option>
+              <option value="rewrite">Rewrite</option>
+              <option value="paraphrase">Paraphrase</option>
             </select>
             <button id="generate-button" class="button primary compact" type="button">Generate</button>
           </div>
         </div>
         <div class="editor-card">
-          <input id="draft-title" class="title-input" value="Untitled" aria-label="Judul draft">
-          <textarea id="draft-content" class="document-editor" placeholder="Hasil AI dan tulisan Anda muncul di sini..."></textarea>
+          <input id="draft-title" class="title-input" value="Untitled" aria-label="Draft title">
+          <textarea id="draft-content" class="document-editor" placeholder="AI generation and your writing will appear here..."></textarea>
           <div class="editor-footer">
             <div>
-              <span id="save-state">Belum disimpan</span>
-              <span id="word-count" class="word-count">0 kata · 0 karakter</span>
+              <span id="save-state">Unsaved</span>
+              <span id="word-count" class="word-count">0 words · 0 characters</span>
             </div>
             <div>
               <button id="copy-button" class="text-button" type="button">Copy</button>
@@ -112,33 +112,33 @@
           <article><strong id="revision-count">0</strong><span>Revisions</span></article>
         </div>
         <div class="tab-row">
-          <button class="chip" data-brain-tab="raw" type="button">Ajarkan</button>
-          <button class="chip" data-brain-tab="compare" type="button">Bandingkan</button>
+          <button class="chip" data-brain-tab="raw" type="button">Teach</button>
+          <button class="chip" data-brain-tab="compare" type="button">Compare</button>
           <button class="chip active" data-brain-tab="style" type="button">Style</button>
           <button class="chip" data-brain-tab="thinking" type="button">Thinking</button>
-          <button class="chip" data-brain-tab="proposals" type="button">Usulan <span id="proposal-count"></span></button>
+          <button class="chip" data-brain-tab="proposals" type="button">Proposals <span id="proposal-count"></span></button>
           <button class="chip" data-brain-tab="references" type="button">References</button>
         </div>
         <div id="brain-list" class="insight-list"></div>
         <div id="brain-teach" class="teach-card hidden">
-          <label for="raw-writing">Contoh tulisan asli</label>
-          <textarea id="raw-writing" rows="9" placeholder="Tempel tulisan Anda agar GhostWriter mempelajari gayanya..."></textarea>
-          <button id="learn-raw-button" class="button primary" type="button">Analisis tulisan</button>
+          <label for="raw-writing">Original writing sample</label>
+          <textarea id="raw-writing" rows="9" placeholder="Paste your writing here so GhostWriter can learn its style..."></textarea>
+          <button id="learn-raw-button" class="button primary" type="button">Analyze writing</button>
         </div>
         <div id="brain-compare" class="teach-card hidden">
-          <label>Tulisan Asli</label>
-          <textarea id="compare-original" rows="5" placeholder="Masukkan teks sebelum direvisi..."></textarea>
-          <label style="margin-top:12px">Hasil Edit</label>
-          <textarea id="compare-edited" rows="5" placeholder="Masukkan teks setelah direvisi..."></textarea>
-          <button id="compare-button" class="button primary" type="button" style="margin-top:12px">Analisis Perubahan</button>
-          <div id="compare-results" class="hidden" style="margin-top:16px; border-top:1px solid var(--line); padding-top:16px;">
+          <label>Original Text</label>
+          <textarea id="compare-original" rows="5" placeholder="Enter text before revision..."></textarea>
+          <label style="margin-top:12px">Edited Text</label>
+          <textarea id="compare-edited" rows="5" placeholder="Enter text after revision..."></textarea>
+          <button id="compare-button" class="button primary" type="button" style="margin-top:12px">Analyze Changes</button>
+          <div id="compare-results" class="hidden" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
             <div id="compare-proposals" class="proposal-list"></div>
-            <button id="commit-compare-button" class="button primary" type="button" style="margin-top:12px">Simpan & Train</button>
+            <button id="commit-compare-button" class="button primary" type="button" style="margin-top:12px">Save & Train</button>
           </div>
         </div>
         <div id="reference-search" class="teach-card hidden">
-          <label for="reference-query">Cari referensi internet</label>
-          <div class="inline-form"><input id="reference-query" placeholder="Topik atau kata kunci"><button id="reference-button" class="button primary compact" type="button">Cari</button></div>
+          <label for="reference-query">Search internet references</label>
+          <div class="inline-form"><input id="reference-query" placeholder="Topic or keyword"><button id="reference-button" class="button primary compact" type="button">Search</button></div>
           <div id="reference-list" class="reference-list"></div>
         </div>
         <div id="proposal-list" class="proposal-list hidden"></div>
@@ -147,16 +147,32 @@
       <section id="view-menu" class="view" aria-label="Settings">
         <div class="section-heading"><div><span class="eyebrow">System</span><h1>Settings</h1></div></div>
         <div class="settings-list">
-          <button id="theme-button" class="setting-row" type="button"><span><strong>Tema Tampilan</strong><small id="theme-detail">Sistem (Otomatis)</small></span><b>◑</b></button>
-          <button id="model-button" class="setting-row" type="button"><span><strong>Model AI</strong><small id="model-detail">Memuat...</small></span><b>›</b></button>
-          <button id="manual-sync" class="setting-row" type="button"><span><strong>Sync GitHub</strong><small id="sync-detail">Belum dikonfigurasi</small></span><b>↻</b></button>
-          <button id="import-button" class="setting-row" type="button"><span><strong>Import data offline</strong><small>Pulihkan data JSON dari perangkat</small></span><b>↑</b></button>
-          <a class="setting-row" href="/api/export" id="export-button"><span><strong>Export data offline</strong><small>Unduh seluruh data JSON ke perangkat</small></span><b>↓</b></a>
+          <button id="theme-button" class="setting-row" type="button"><span><strong>Theme</strong><small id="theme-detail">System (Auto)</small></span><b>◑</b></button>
+          
+          <div class="setting-row" style="flex-direction: column; align-items: stretch; gap: 16px; cursor: default;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span><strong>AI Provider</strong><small>Choose your AI backend</small></span>
+            </div>
+            <select id="ai-provider-select" style="width: 100%; margin-bottom: 8px;">
+              <option value="huggingface">Hugging Face Space (Default)</option>
+              <option value="openrouter">OpenRouter API</option>
+            </select>
+            <div id="openrouter-config" class="hidden" style="display: flex; flex-direction: column; gap: 12px;">
+              <input id="openrouter-key" type="password" placeholder="OpenRouter API Key (sk-or-v1-...)" autocomplete="off">
+              <input id="openrouter-model" type="text" placeholder="Model (e.g., anthropic/claude-3-haiku)" value="anthropic/claude-3-haiku">
+              <button id="save-provider-btn" class="button compact primary" style="align-self: flex-start;">Save Configuration</button>
+            </div>
+          </div>
+
+          <button id="model-button" class="setting-row" type="button"><span><strong>AI Model</strong><small id="model-detail">Loading...</small></span><b>›</b></button>
+          <button id="manual-sync" class="setting-row" type="button"><span><strong>GitHub Sync</strong><small id="sync-detail">Not configured</small></span><b>↻</b></button>
+          <button id="import-button" class="setting-row" type="button"><span><strong>Import Offline Data</strong><small>Restore JSON data from device</small></span><b>↑</b></button>
+          <a class="setting-row" href="/api/export" id="export-button"><span><strong>Export Offline Data</strong><small>Download all JSON data to device</small></span><b>↓</b></a>
           <input type="file" id="import-file" accept=".zip" class="hidden">
-          <button id="install-button" class="setting-row hidden" type="button"><span><strong>Install aplikasi</strong><small>Tambahkan GhostWriter ke perangkat</small></span><b>+</b></button>
-          <button id="logout-button" class="setting-row danger-row" type="button"><span><strong>Keluar</strong><small>Hapus sesi di perangkat ini</small></span><b>›</b></button>
+          <button id="install-button" class="setting-row hidden" type="button"><span><strong>Install App</strong><small>Add GhostWriter to home screen</small></span><b>+</b></button>
+          <button id="logout-button" class="setting-row danger-row" type="button"><span><strong>Sign Out</strong><small>Clear session on this device</small></span><b>›</b></button>
         </div>
-        <p class="version">GhostWriter v1.0 · Hugging Face Space</p>
+        <p class="version">GhostWriter v1.5 · AI Powered</p>
       </section>
     </main>
   </div>
@@ -172,8 +188,8 @@
     <div class="dialog-card">
       <p id="confirm-message"></p>
       <div class="dialog-actions">
-        <button id="confirm-cancel" class="button compact" type="button">Batal</button>
-        <button id="confirm-ok" class="button primary compact" type="button">Ya</button>
+        <button id="confirm-cancel" class="button compact" type="button">Cancel</button>
+        <button id="confirm-ok" class="button primary compact" type="button">Yes</button>
       </div>
     </div>
   </div>
@@ -182,8 +198,8 @@
       <p id="prompt-message"></p>
       <input id="prompt-input" type="text" style="width: 100%; margin-bottom: 24px;" autocomplete="off">
       <div class="dialog-actions">
-        <button id="prompt-cancel" class="button compact" type="button">Batal</button>
-        <button id="prompt-ok" class="button primary compact" type="button">Simpan</button>
+        <button id="prompt-cancel" class="button compact" type="button">Cancel</button>
+        <button id="prompt-ok" class="button primary compact" type="button">Save</button>
       </div>
     </div>
   </div>

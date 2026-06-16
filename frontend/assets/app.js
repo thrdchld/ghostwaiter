@@ -18,13 +18,23 @@ const state = {
 async function api(path, options = {}) {
   const config = {...options, credentials: "same-origin", headers: {...(options.headers || {})}};
   if (state.sessionToken) config.headers.Authorization = `Bearer ${state.sessionToken}`;
+  
+  const provider = localStorage.getItem("ghostwriter:ai_provider") || "huggingface";
+  config.headers["X-AI-Provider"] = provider;
+  if (provider === "openrouter") {
+    const key = localStorage.getItem("ghostwriter:openrouter_key");
+    const model = localStorage.getItem("ghostwriter:openrouter_model");
+    if (key) config.headers["X-OpenRouter-Key"] = key;
+    if (model) config.headers["X-OpenRouter-Model"] = model;
+  }
+
   if (config.body && !(config.body instanceof FormData)) {
     config.headers["Content-Type"] = "application/json";
     if (typeof config.body !== "string") config.body = JSON.stringify(config.body);
   }
   const response = await fetch(path, config);
   if (!response.ok) {
-    let message = `Request gagal (${response.status})`;
+    let message = `Request failed (${response.status})`;
     try {
       const data = await response.json();
       message = data.message || data.detail?.message || data.detail || message;
@@ -276,7 +286,7 @@ async function switchWorkspace(id) {
   restoreLocalDraft();
   closeSheet();
   await Promise.all([loadBrain(), loadSyncStatus()]);
-  toast("Workspace diganti");
+    toast("Workspace switched");
 }
 
 async function createWorkspace(customName = null) {
@@ -297,7 +307,7 @@ function appendMessage(role, content = "") {
   const node = document.createElement("div");
   node.className = `message ${role}`;
   if (role === "assistant") {
-    node.innerHTML = `<div class="msg-content">${renderMarkdown(content)}</div><button class="chat-copy-btn" type="button" aria-label="Copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText.trim()); toast('Pesan disalin', 'success')">📋 Copy</button>`;
+    node.innerHTML = `<div class="msg-content">${renderMarkdown(content)}</div><button class="chat-copy-btn" type="button" aria-label="Copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText.trim()); toast('Message copied', 'success')">📋 Copy</button>`;
   } else {
     node.textContent = content;
   }
@@ -338,7 +348,7 @@ async function sendChat(event) {
       if (!fullResponse.trim()) assistant.querySelector(".msg-content").innerHTML = renderMarkdown("*(Jaringan AI sedang sibuk atau kuota habis, coba lagi nanti)*");
     } else {
       if (fullResponse.trim()) {
-        toast(`Koneksi terputus: ${error.message}`, "error");
+        toast(`Connection lost: ${error.message}`, "error");
       } else {
         assistant.querySelector(".msg-content").innerHTML = renderMarkdown(`**Error:** ${error.message}`);
       }
@@ -351,7 +361,7 @@ async function sendChat(event) {
         const profile = await jsonApi(`/api/brain/profile?workspace_id=${encodeURIComponent(state.workspace)}`);
         state.brain = profile;
         $("#proposal-count").textContent = profile.pending_proposals ? `(${profile.pending_proposals})` : "";
-        if (profile.pending_proposals > previous) toast("Ada usulan pembelajaran baru untuk ditinjau");
+        if (profile.pending_proposals > previous) toast("New learning proposals to review");
       } catch (_) {}
     }, 4500);
   }
@@ -415,7 +425,7 @@ async function archiveChat(id) {
 async function restoreChat(id) {
   await jsonApi("/api/chat/restore", {method: "POST", body: {workspace_id: state.workspace, chat_id: id}});
   await renderChatHistory(true);
-  toast("Chat dipulihkan");
+  toast("Chat restored");
 }
 
 async function purgeChat(id) {
@@ -435,7 +445,7 @@ async function loadChat(id) {
 
 async function generateWriting() {
   const prompt = $("#write-prompt").value.trim();
-  if (!prompt) return toast("Tulis instruksi terlebih dahulu");
+  if (!prompt) return toast("Write an instruction first");
   const button = $("#generate-button");
   button.disabled = true;
   button.textContent = "Menulis...";
@@ -461,8 +471,8 @@ async function generateWriting() {
     saveUndoState();
     updateWordCount();
   } catch (error) {
-    if (error.message.includes("Semua model inference gagal")) {
-      toast("Jaringan AI sedang sibuk, silakan coba lagi nanti");
+    if (error.message.includes("All inference models failed")) {
+      toast("AI network is busy, please try again later");
     } else {
       toast(error.message, "error");
     }
@@ -563,8 +573,8 @@ async function loadDraft(id) {
 
 async function trainRevision() {
   const revised = $("#draft-content").value.trim();
-  if (!state.originalAiText || !revised) return toast("Generate tulisan lalu edit sebelum Train");
-  if (revised === state.originalAiText.trim()) return toast("Belum ada revisi yang dapat dipelajari");
+  if (!state.originalAiText || !revised) return toast("Generate writing then edit before Training");
+  if (revised === state.originalAiText.trim()) return toast("No revisions available to learn");
   const button = $("#train-button");
   button.disabled = true;
   button.textContent = "Learning...";
@@ -574,7 +584,7 @@ async function trainRevision() {
       body: {workspace_id: state.workspace, ai_output: state.originalAiText, user_revision: revised},
     });
     state.originalAiText = revised;
-    toast(`${result.analysis.style_rules.length + result.analysis.thinking_patterns.length} pola dipelajari`);
+    toast(`${result.analysis.style_rules.length + result.analysis.thinking_patterns.length} patterns learned`);
   } catch (error) {
     toast(error.message);
   } finally {
@@ -633,12 +643,12 @@ async function decideProposal(button, approve) {
   const card = button.closest(".proposal-card");
   const body = {workspace_id: state.workspace, proposal_id: card.dataset.id};
   if (approve) body.content = card.querySelector(".proposal-content").value.trim();
-  if (approve && !body.content) return toast("Isi usulan tidak boleh kosong");
+  if (approve && !body.content) return toast("Proposal content cannot be empty");
   button.disabled = true;
   try {
     await jsonApi(`/api/brain/proposals/${approve ? "approve" : "reject"}`, {method: "POST", body});
     await Promise.all([loadProposals(), loadBrain()]);
-    toast(approve ? "Pembelajaran disetujui" : "Usulan ditolak");
+    toast(approve ? "Learning approved" : "Proposal rejected");
   } catch (error) {
     toast(error.message);
   }
@@ -646,7 +656,7 @@ async function decideProposal(button, approve) {
 
 async function learnRawWriting() {
   const content = $("#raw-writing").value.trim();
-  if (!content) return toast("Masukkan contoh tulisan");
+  if (!content) return toast("Enter a writing sample");
   const button = $("#learn-raw-button");
   button.disabled = true;
   button.textContent = "Menganalisis...";
@@ -658,7 +668,7 @@ async function learnRawWriting() {
     state.brainTab = "style";
     $$(".chip").forEach(c => c.classList.toggle("active", c.dataset.brainTab === "style"));
     await loadBrain();
-    toast(`${result.analysis.style_rules.length} pola dipelajari`);
+    toast(`${result.analysis.style_rules.length} patterns learned`);
   } catch (error) {
     toast(error.message);
   } finally {
@@ -670,7 +680,7 @@ async function learnRawWriting() {
 async function compareRevision() {
   const original = $("#compare-original").value.trim();
   const edited = $("#compare-edited").value.trim();
-  if (!original || !edited) return toast("Isi teks asli dan hasil edit");
+  if (!original || !edited) return toast("Fill in the original and edited texts");
   const button = $("#compare-button");
   button.disabled = true;
   button.textContent = "Menganalisis...";
@@ -711,7 +721,7 @@ async function commitCompare() {
     await jsonApi("/api/brain/commit-revision", {
       method: "POST", body: {workspace_id: state.workspace, analysis: {style_rules, thinking_patterns}}
     });
-    toast("Pola berhasil dipelajari", "success");
+    toast("Patterns successfully learned", "success");
     $("#compare-original").value = "";
     $("#compare-edited").value = "";
     $("#compare-results").classList.add("hidden");
@@ -735,7 +745,7 @@ async function searchReferences() {
       method: "POST", body: {workspace_id: state.workspace, query, auto_save: true},
     });
     renderReferences(data.items);
-    toast(`${data.items.length} referensi disimpan`);
+    toast(`${data.items.length} references saved`);
   } catch (error) {
     toast(error.message);
   } finally {
@@ -812,7 +822,7 @@ async function refreshModelSheet() {
 
 async function searchModels() {
   const query = $("#model-query").value.trim();
-  if (query.length < 2) return toast("Masukkan minimal 2 karakter");
+  if (query.length < 2) return toast("Enter at least 2 characters");
   $("#model-search-button").disabled = true;
   $("#model-results").innerHTML = "<p>Mencari...</p>";
   try {
@@ -844,7 +854,7 @@ async function testModel(model, button) {
   button.textContent = "...";
   try {
     await jsonApi("/api/model/test", {method: "POST", body: {model_id: model}});
-    toast(`${model} dapat digunakan`);
+    toast(`${model} is available`);
   } catch (error) {
     toast(error.message);
   } finally {
@@ -856,19 +866,19 @@ async function testModel(model, button) {
 async function setDefaultModel(model) {
   await jsonApi("/api/model/set-default", {method: "POST", body: {model_id: model}});
   await refreshModelSheet();
-  toast("Model default diperbarui");
+  toast("Default model updated");
 }
 
 async function addFallbackModel(model) {
   await jsonApi("/api/model/add-fallback", {method: "POST", body: {model_id: model}});
   await refreshModelSheet();
-  toast("Model ditambahkan ke fallback");
+  toast("Model added to fallback");
 }
 
 async function removeModel(model) {
   await jsonApi("/api/model/remove", {method: "POST", body: {model_id: model}});
   await refreshModelSheet();
-  toast("Model dihapus dari fallback");
+  toast("Model removed from fallback");
 }
 
 async function moveModel(chain, index, delta) {
@@ -885,7 +895,7 @@ async function manualSync() {
   try {
     $("#manual-sync").disabled = true;
     await jsonApi("/api/sync/run", {method: "POST"});
-    toast("Sync selesai", "success");
+    toast("Sync complete", "success");
     await loadSyncStatus();
   } catch (error) {
     toast(error.message, "error");
@@ -918,6 +928,32 @@ function bindEvents() {
   if ($("#mobile-sidebar-toggle")) $("#mobile-sidebar-toggle").onclick = toggleSidebar;
   if ($("#sidebar-backdrop")) $("#sidebar-backdrop").onclick = toggleSidebar;
   if ($("#theme-button")) $("#theme-button").onclick = cycleTheme;
+  
+  // AI Provider settings
+  const providerSelect = $("#ai-provider-select");
+  const orConfig = $("#openrouter-config");
+  if (providerSelect) {
+    providerSelect.value = localStorage.getItem("ghostwriter:ai_provider") || "huggingface";
+    if (providerSelect.value === "openrouter") orConfig.classList.remove("hidden");
+    
+    providerSelect.onchange = (e) => {
+      if (e.target.value === "openrouter") orConfig.classList.remove("hidden");
+      else orConfig.classList.add("hidden");
+    };
+    
+    $("#openrouter-key").value = localStorage.getItem("ghostwriter:openrouter_key") || "";
+    $("#openrouter-model").value = localStorage.getItem("ghostwriter:openrouter_model") || "anthropic/claude-3-haiku";
+    
+    $("#save-provider-btn").onclick = () => {
+      localStorage.setItem("ghostwriter:ai_provider", providerSelect.value);
+      if (providerSelect.value === "openrouter") {
+        localStorage.setItem("ghostwriter:openrouter_key", $("#openrouter-key").value.trim());
+        localStorage.setItem("ghostwriter:openrouter_model", $("#openrouter-model").value.trim());
+      }
+      toast("AI Provider configuration saved", "success");
+    };
+  }
+
   $("#workspace-button").onclick = showWorkspaceSheet;
   $("#sheet-close").onclick = closeSheet;
   $("#backdrop").onclick = closeSheet;
@@ -944,7 +980,7 @@ function bindEvents() {
     }
   });
   $("#write-prompt").addEventListener("input", saveDraftLocally);
-  $("#copy-button").onclick = async () => { await navigator.clipboard.writeText($("#draft-content").value); toast("Disalin"); };
+  $("#copy-button").onclick = async () => { await navigator.clipboard.writeText($("#draft-content").value); toast("Copied"); };
   $("#train-button").onclick = trainRevision;
   $("#refresh-brain").onclick = loadBrain;
   $$(".chip").forEach(chip => chip.onclick = () => {
@@ -962,7 +998,7 @@ function bindEvents() {
   $("#import-file").onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    toast("Mengimpor data...");
+    toast("Importing data...");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -972,10 +1008,10 @@ function bindEvents() {
       
       const response = await fetch("/api/import", { method: "POST", headers, body: formData });
       if (!response.ok) throw await response.json().catch(() => ({message: `HTTP ${response.status}`}));
-      toast("Import berhasil! Memuat ulang...", "success");
+      toast("Import successful! Reloading...", "success");
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
-      toast("Gagal mengimpor file: " + err.message, "error");
+      toast("Failed to import file: " + err.message, "error");
     }
     e.target.value = "";
   };
@@ -1060,7 +1096,7 @@ function updateWordCount() {
   const text = $("#draft-content").value || "";
   const chars = text.length;
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-  $("#word-count").textContent = `${words} kata · ${chars} karakter`;
+  $("#word-count").textContent = `${words} words · ${chars} characters`;
 }
 
 bindEvents();
