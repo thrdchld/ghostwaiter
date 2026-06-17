@@ -7,7 +7,7 @@ sdk: docker
 app_port: 7860
 fullWidth: true
 pinned: false
-short_description: Personal writing intelligence that learns your style.
+short_description: Personal writing assistant that learns style, thinking, and memory.
 models:
   - Qwen/Qwen3-4B-Instruct-2507
   - Qwen/Qwen3-8B
@@ -19,98 +19,92 @@ tags:
   - inference-providers
 ---
 
-# GhostWriter
+# GhostWriter v1.5
 
-GhostWriter adalah web app penulisan personal berbasis FastAPI dan Hugging Face
-Inference Providers. Aplikasi menyimpan draft, chat, Brain profile, references,
-dan snapshot secara terisolasi per workspace.
+GhostWriter adalah web app penulisan personal yang menggabungkan chat, editor tulisan, sistem pembelajaran gaya, dan backup GitHub. Aplikasi ini berjalan sebagai satu halaman PWA dengan backend FastAPI yang menyimpan data secara lokal dan menyediakan sinkronisasi manual ke GitHub.
 
-## Fitur
+## Ringkasan versi 1.5
 
-- Dukungan Multi-Provider (OpenRouter, Groq, DeepSeek, Mistral, Gemini, Kilo) yang diatur langsung via web UI.
-- Chat dan writing generation dengan streaming serta dynamic model awareness.
-- Markdown chat yang dirender aman dan bersih (tag chain-of-thought `<think>` otomatis difilter).
-- Rename, arsip, restore, dan hapus permanen chat.
-- Brain Center: Kelola profil Style, Thinking, dan Memory secara utuh (Edit, Hapus, Setujui/Tolak usulan massal).
-- Draft autosave lokal dan server.
-- Workspace yang terisolasi dan bisa dikelola penuh (Rename & Delete).
-- PWA mobile-first dengan antarmuka dialog glassmorphism.
-- Sinkronisasi GitHub berbasis folder (Git Trees API) dengan kontrol Push & Pull manual dari UI untuk keamanan data maksimal.
-- Export & Import data via ZIP offline.
+- UI utama: Chat, Write, Brain, dan Settings.
+- Provider AI dapat dipilih dari UI (OpenRouter, Google Gemini, Groq, DeepSeek, Mistral, Kilo).
+- Chat dan generate tulisan berjalan dengan streaming.
+- Draft autosave dan word count tersedia di editor.
+- Brain menyimpan style rules, thinking patterns, memory, rules, references, dan learning proposals.
+- Workspace dapat dibuat, dipilih, di-rename, dan dihapus (kecuali workspace default `writing`).
+- Data dapat diekspor/impor dalam format ZIP dan disinkronkan ke GitHub secara manual.
 
-## Konfigurasi Space
+## Fitur utama
 
-Tambahkan secrets berikut melalui **Settings → Variables and secrets**:
+- Multi-provider inference dengan model yang dipilih dari UI.
+- Streaming chat dan writing generation.
+- Safe Markdown rendering dengan filter otomatis untuk blok `<think>`.
+- Draft editor dengan autosave lokal dan tombol train/copy.
+- Brain Center untuk mengelola style, thinking, memory, rules, dan proposal.
+- Referensi web via Tavily untuk mendukung pembelajaran.
+- Snapshot, export ZIP, dan import ZIP.
+- PWA dengan service worker dan install support.
 
-| Secret | Wajib | Kegunaan |
-|---|---:|---|
-| `HF_TOKEN` | Ya | Memanggil Hugging Face Inference Providers |
-| `APP_PASSWORD` | Disarankan | Membatasi akses aplikasi single-user |
-| `SESSION_SECRET` | Disarankan | Menandatangani session cookie |
-| `GITHUB_TOKEN` | Tidak | Menyinkronkan backup ke GitHub |
-| `TAVILY_API_KEY` | Tidak | Pencarian referensi internet |
+## Konfigurasi environment
 
-Tambahkan variables berikut bila diperlukan:
+Untuk deployment (misalnya Hugging Face Space), atur secret/variable berikut:
 
-| Variable | Default |
-|---|---|
-| `HF_MODEL` | `Qwen/Qwen3-4B-Instruct-2507` |
-| `HF_FALLBACK_MODELS` | `Qwen/Qwen3-8B,mistralai/Mistral-7B-Instruct-v0.3` |
-| `HF_INFERENCE_PROVIDER` | `auto` |
-| `GITHUB_BACKUP_REPO` | kosong, format `owner/repo` |
-| `SYNC_DEBOUNCE_SECONDS` | `45` |
+| Jenis | Nama | Wajib | Keterangan |
+|---|---|---:|---|
+| Secret | `HF_TOKEN` | Ya | Token untuk Inference Providers |
+| Secret | `APP_PASSWORD` | Tidak | Password aplikasi jika ingin proteksi single-user |
+| Secret | `SESSION_SECRET` | Tidak | Secret untuk session cookie |
+| Secret | `GITHUB_TOKEN` | Tidak | Token GitHub untuk backup/sync |
+| Secret | `TAVILY_API_KEY` | Tidak | API key untuk pencarian referensi web |
+| Variable | `HF_MODEL` | Tidak | Model default, default: `Qwen/Qwen3-4B-Instruct-2507` |
+| Variable | `HF_FALLBACK_MODELS` | Tidak | Daftar fallback model |
+| Variable | `GITHUB_BACKUP_REPO` | Tidak | Format `owner/repo` |
+| Variable | `SYNC_DEBOUNCE_SECONDS` | Tidak | Delay autosync, default `45` |
+| Variable | `DATA_DIR` | Tidak | Lokasi storage data jika ingin menyimpan di path lain |
 
-Token GitHub memerlukan akses **Contents: Read and write** hanya untuk repository
-backup yang dituju. Token disimpan sebagai Space Secret dan tidak dikirim ke
-frontend.
+## Struktur data
 
-## Penyimpanan
+Aplikasi menyimpan metadata di folder `data` (atau lokasi yang ditentukan oleh `DATA_DIR`). Struktur utama:
 
-Jika `/data` tersedia dan writable, aplikasi menggunakannya sebagai persistent
-storage. Tanpa persistent storage, data runtime dapat hilang ketika Space
-restart; aktifkan GitHub backup atau lakukan export ZIP berkala.
+```text
+data/
+  system/
+    settings.json
+    models.json
+    workspaces.json
+  workspaces/
+    <workspace_id>/
+      drafts/
+      chats/
+      brain/
+      references/
+      summary/
+      learning/
+      settings/
+  queue/
+  snapshots/
+  archive/
+```
 
 ## Menjalankan lokal
 
 ```bash
 python -m venv .venv
-. .venv/bin/activate
+source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 uvicorn app:app --reload --port 7860
 ```
 
-Environment dari `.env` perlu diekspor oleh shell atau loader pilihan Anda.
+Jika Anda tidak menggunakan `.env`, export variabel yang diperlukan sebelum menjalankan server.
 
-## Struktur
+## Catatan arsitektur
 
-```text
-app.py
-backend/
-  ai.py
-  config.py
-  main.py
-  storage.py
-frontend/
-  index.html
-  assets/
-  manifest.webmanifest
-  service-worker.js
-  data/
-  system/
-  workspaces/
-  queue/
-  snapshots/
-```
+- Backend: FastAPI, REST API, streaming response, auth cookie/session.
+- Frontend: static HTML/CSS/JS, no heavy framework.
+- Storage: JSON file per entity, not a single monolithic DB.
+- Sync: manual GitHub push/pull via GitHub API.
+- PWA: service worker + Web App Manifest untuk install di mobile.
 
-Brain workspace juga menyimpan:
+## Bukan fitur
 
-```text
-brain/conversation_memory.json
-brain/learning_proposals.json
-summary/workspace_summary.json
-```
-
-Implementasi ini sengaja tidak memiliki terminal agent, command execution, atau
-model GGUF lokal. `base-project.sh` dipertahankan hanya sebagai referensi sistem
-lama dan tidak dipakai oleh Docker image.
+Implementasi ini sengaja tidak menyediakan terminal agent, command execution, atau model lokal GGUF. File `base-project.sh` tetap ada sebagai referensi lama, tapi aplikasi saat ini berjalan dari backend dan frontend yang ada di repo ini.
