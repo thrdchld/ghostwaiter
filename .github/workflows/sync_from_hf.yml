@@ -1,0 +1,27 @@
+name: Sync FROM Hugging Face Space
+
+on:
+  repository_dispatch:
+    types: [hf_space_update]
+
+jobs:
+  sync-from-hf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GitHub Repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Git Config
+        run: |
+          git config --global user.name "hf-sync-bot"
+          git config --global user.email "bot@huggingface.co"
+
+      - name: Pull and Merge from HF Space
+        run: |
+          git remote add hf https://huggingface.co/spaces/thrdchld/ghostwriter
+          git fetch hf
+          git merge hf/main --allow-unrelated-histories -m "Sync: Otomatis menarik perubahan dari HF Space [skip ci]"
+          git push origin main

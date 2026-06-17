@@ -8,6 +8,7 @@ on:
 jobs:
   sync-to-hub:
     runs-on: ubuntu-latest
+    if: github.actor != 'hf-sync-bot' && !contains(github.event.head_commit.message, 'Sync:')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
