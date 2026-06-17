@@ -8,10 +8,13 @@ app_port: 7860
 fullWidth: true
 pinned: false
 short_description: Personal writing assistant that learns style, thinking, and memory.
-models:
-  - Qwen/Qwen3-4B-Instruct-2507
-  - Qwen/Qwen3-8B
-  - mistralai/Mistral-7B-Instruct-v0.3
+models provider:
+  - OpenRouter
+  - Google Gemini
+  - Groq
+  - DeepSeek
+  - Mistral
+  - Kilo
 tags:
   - writing
   - pwa
@@ -19,14 +22,15 @@ tags:
   - inference-providers
 ---
 
-# GhostWriter v1.5
+# GhostWriter v1.0
 
 GhostWriter adalah web app penulisan personal yang menggabungkan chat, editor tulisan, sistem pembelajaran gaya, dan backup GitHub. Aplikasi ini berjalan sebagai satu halaman PWA dengan backend FastAPI yang menyimpan data secara lokal dan menyediakan sinkronisasi manual ke GitHub.
 
-## Ringkasan versi 1.5
+## Ringkasan versi 1.0
 
 - UI utama: Chat, Write, Brain, dan Settings.
-- Provider AI dapat dipilih dari UI (OpenRouter, Google Gemini, Groq, DeepSeek, Mistral, Kilo).
+- Provider AI dan model dipilih langsung dari UI sesuai kebutuhan perangkat pengguna.
+- Tidak ada model bawaan yang dipaksa oleh server; pengguna mengisi API key provider yang ingin dipakai.
 - Chat dan generate tulisan berjalan dengan streaming.
 - Draft autosave dan word count tersedia di editor.
 - Brain menyimpan style rules, thinking patterns, memory, rules, references, dan learning proposals.
@@ -35,7 +39,7 @@ GhostWriter adalah web app penulisan personal yang menggabungkan chat, editor tu
 
 ## Fitur utama
 
-- Multi-provider inference dengan model yang dipilih dari UI.
+- Multi-provider inference dengan provider dan model yang dipilih langsung dari UI.
 - Streaming chat dan writing generation.
 - Safe Markdown rendering dengan filter otomatis untuk blok `<think>`.
 - Draft editor dengan autosave lokal dan tombol train/copy.
@@ -50,20 +54,18 @@ Untuk deployment (misalnya Hugging Face Space), atur secret/variable berikut:
 
 | Jenis | Nama | Wajib | Keterangan |
 |---|---|---:|---|
-| Secret | `HF_TOKEN` | Ya | Token untuk Inference Providers |
+| Secret | `HF_TOKEN` | Tidak | Token provider opsional untuk deployment server-side |
 | Secret | `APP_PASSWORD` | Tidak | Password aplikasi jika ingin proteksi single-user |
 | Secret | `SESSION_SECRET` | Tidak | Secret untuk session cookie |
 | Secret | `GITHUB_TOKEN` | Tidak | Token GitHub untuk backup/sync |
 | Secret | `TAVILY_API_KEY` | Tidak | API key untuk pencarian referensi web |
-| Variable | `HF_MODEL` | Tidak | Model default, default: `Qwen/Qwen3-4B-Instruct-2507` |
-| Variable | `HF_FALLBACK_MODELS` | Tidak | Daftar fallback model |
 | Variable | `GITHUB_BACKUP_REPO` | Tidak | Format `owner/repo` |
 | Variable | `SYNC_DEBOUNCE_SECONDS` | Tidak | Delay autosync, default `45` |
 | Variable | `DATA_DIR` | Tidak | Lokasi storage data jika ingin menyimpan di path lain |
 
 ## Struktur data
 
-Aplikasi menyimpan metadata di folder `data` (atau lokasi yang ditentukan oleh `DATA_DIR`). Struktur utama:
+Aplikasi menyimpan metadata di folder `data` (atau lokasi yang ditentukan oleh `DATA_DIR`). Struktur utama tetap mengikuti layout lokal-first yang sama:
 
 ```text
 data/
@@ -101,10 +103,10 @@ Jika Anda tidak menggunakan `.env`, export variabel yang diperlukan sebelum menj
 
 - Backend: FastAPI, REST API, streaming response, auth cookie/session.
 - Frontend: static HTML/CSS/JS, no heavy framework.
-- Storage: JSON file per entity, not a single monolithic DB.
+- Storage: JSON file per entity, bukan satu database tunggal.
 - Sync: manual GitHub push/pull via GitHub API.
 - PWA: service worker + Web App Manifest untuk install di mobile.
 
 ## Bukan fitur
 
-Implementasi ini sengaja tidak menyediakan terminal agent, command execution, atau model lokal GGUF. File `base-project.sh` tetap ada sebagai referensi lama, tapi aplikasi saat ini berjalan dari backend dan frontend yang ada di repo ini.
+Implementasi ini sengaja tidak menyediakan terminal agent, command execution, atau model lokal GGUF. File `base-project.sh` tetap ada sebagai referensi historis, tetapi aplikasi yang aktif saat ini berjalan dari backend dan frontend yang ada di repo ini.

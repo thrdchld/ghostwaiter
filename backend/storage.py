@@ -65,8 +65,9 @@ class JsonStore:
             self.root / "system" / "models.json",
             {
                 "schema_version": SCHEMA_VERSION,
-                "default_model": settings.default_model,
-                "fallback_models": list(settings.fallback_models),
+                "provider": "",
+                "model": "",
+                "last_updated": "",
             },
         )
         self.ensure_json(

@@ -156,11 +156,10 @@ def build_chat_context(active_workspace: str, message: str) -> tuple[str, list[s
     )
     app_map = (
         "PETA APLIKASI GHOSTWRITER\n"
-        "Kemampuan: chat, draft/editor, Brain learning, references, workspace, model manager, "
+        "Kemampuan: chat, draft/editor, Brain learning, references, workspace, konfigurasi provider/model, "
         "GitHub sync, snapshot, dan export.\n"
         f"Workspace tersedia: {workspace_names}.\n"
-        f"Model default: {models.get('default_model', '')}. "
-        f"Fallback: {', '.join(models.get('fallback_models', [])) or 'tidak ada'}.\n"
+        f"Provider/model saat ini: {models.get('provider', '') or 'belum ditentukan'} / {models.get('model', '') or 'belum ditentukan'}.\n"
         "Data JSON workspace: drafts/*.json, chats/*.json, brain/style_profile.json, "
         "brain/thinking_profile.json, brain/memory.json, brain/rules.json, "
         "brain/conversation_memory.json, brain/learning_proposals.json, references/*.json, "
