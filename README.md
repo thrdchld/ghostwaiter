@@ -7,8 +7,8 @@ sdk: docker
 app_port: 7860
 fullWidth: true
 pinned: false
-short_description: Personal writing assistant that learns style, thinking, and memory.
-models provider:
+short_description: AI writing coach with memory
+models:
   - OpenRouter
   - Google Gemini
   - Groq
@@ -24,7 +24,9 @@ tags:
 
 # GhostWriter v1.0
 
-GhostWriter adalah web app penulisan personal yang menggabungkan chat, editor tulisan, sistem pembelajaran gaya, dan backup GitHub. Aplikasi ini berjalan sebagai satu halaman PWA dengan backend FastAPI yang menyimpan data secara lokal dan menyediakan sinkronisasi manual ke GitHub.
+GhostWriter adalah web app penulisan personal yang menggabungkan chat, editor tulisan, sistem pembelajaran gaya, dan sinkronisasi GitHub. Aplikasi ini berjalan sebagai satu halaman PWA dengan backend FastAPI yang menyimpan data secara lokal dan dapat dipadukan dengan Hugging Face Space.
+
+> ⚠️ Pengingat sinkronisasi: repo GitHub ini terhubung ke Hugging Face Space dan sebaliknya. Perubahan yang dibuat di GitHub harus dipush ke repo yang sama, lalu Space perlu di-rebuild atau di-pull sesuai alur deployment; perubahan yang dibuat di Space juga perlu disinkronkan kembali ke GitHub agar data tetap konsisten.
 
 ## Ringkasan versi 1.0
 
@@ -36,6 +38,7 @@ GhostWriter adalah web app penulisan personal yang menggabungkan chat, editor tu
 - Brain menyimpan style rules, thinking patterns, memory, rules, references, dan learning proposals.
 - Workspace dapat dibuat, dipilih, di-rename, dan dihapus (kecuali workspace default `writing`).
 - Data dapat diekspor/impor dalam format ZIP dan disinkronkan ke GitHub secara manual.
+- Repo GitHub dan Hugging Face Space dapat dijaga agar tetap sinkron dua arah.
 
 ## Fitur utama
 
@@ -50,7 +53,7 @@ GhostWriter adalah web app penulisan personal yang menggabungkan chat, editor tu
 
 ## Konfigurasi environment
 
-Untuk deployment (misalnya Hugging Face Space), atur secret/variable berikut:
+Untuk deployment (misalnya Hugging Face Space), atur secret/variable berikut. Pastikan juga repo GitHub dan Space yang dipakai sudah terkoneksi dengan benar agar sinkronisasi dua arah berjalan konsisten.
 
 | Jenis | Nama | Wajib | Keterangan |
 |---|---|---:|---|
@@ -62,6 +65,13 @@ Untuk deployment (misalnya Hugging Face Space), atur secret/variable berikut:
 | Variable | `GITHUB_BACKUP_REPO` | Tidak | Format `owner/repo` |
 | Variable | `SYNC_DEBOUNCE_SECONDS` | Tidak | Delay autosync, default `45` |
 | Variable | `DATA_DIR` | Tidak | Lokasi storage data jika ingin menyimpan di path lain |
+
+## Sync GitHub ↔ Hugging Face Space
+
+- Push perubahan ke repo GitHub utama, lalu lakukan rebuild/redeploy di Hugging Face Space.
+- Setelah Space berjalan, gunakan fitur sync di aplikasi untuk menarik data dari repo GitHub bila dibutuhkan.
+- Hindari mengubah data di dua tempat secara terpisah tanpa sinkronisasi ulang.
+- Untuk backup yang aman, simpan token dan repo target di secrets/variables Space sesuai konfigurasi di atas.
 
 ## Struktur data
 
