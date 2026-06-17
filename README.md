@@ -27,21 +27,16 @@ dan snapshot secara terisolasi per workspace.
 
 ## Fitur
 
-- Chat dan writing generation dengan streaming
-- Markdown chat yang dirender aman dan rapi
-- Ringkasan serta konsep percakapan yang terhubung antar-chat dalam satu workspace
-- Akses workspace lain hanya ketika diminta eksplisit
-- Rename, arsip, restore, dan hapus permanen chat
-- Usulan pembelajaran chat yang dapat diedit, disetujui, atau ditolak
-- Model utama dan fallback melalui Hugging Face
-- Pencarian, pengujian, penambahan, dan pengurutan model Hugging Face
-- Draft autosave lokal dan server
-- PWA mobile-first dengan offline app shell
-- Style profile dan thinking profile dari revisi pengguna
-- Workspace yang terisolasi
-- Quick notes, references, snapshot, export ZIP
-- GitHub backup queue dan autosync
-- Password protection opsional
+- Dukungan Multi-Provider (OpenRouter, Groq, DeepSeek, Mistral, Gemini, Kilo) yang diatur langsung via web UI.
+- Chat dan writing generation dengan streaming serta dynamic model awareness.
+- Markdown chat yang dirender aman dan bersih (tag chain-of-thought `<think>` otomatis difilter).
+- Rename, arsip, restore, dan hapus permanen chat.
+- Brain Center: Kelola profil Style, Thinking, dan Memory secara utuh (Edit, Hapus, Setujui/Tolak usulan massal).
+- Draft autosave lokal dan server.
+- Workspace yang terisolasi dan bisa dikelola penuh (Rename & Delete).
+- PWA mobile-first dengan antarmuka dialog glassmorphism.
+- Sinkronisasi GitHub berbasis folder (Git Trees API) dengan kontrol Push & Pull manual dari UI untuk keamanan data maksimal.
+- Export & Import data via ZIP offline.
 
 ## Konfigurasi Space
 
