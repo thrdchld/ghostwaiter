@@ -10,6 +10,7 @@ const state = {
   currentDraft: null,
   originalAiText: "",
   brain: null,
+  proposals: [],
   brainTab: "style",
   saveTimer: null,
   deferredInstall: null,
@@ -715,9 +716,10 @@ function renderBrainTab() {
 async function loadProposals() {
   try {
     const data = await jsonApi(`/api/brain/proposals?workspace_id=${encodeURIComponent(state.workspace)}&status=pending`);
+    state.proposals = data.items || [];
     const bulkDiv = $("#proposal-bulk-actions");
-    if (bulkDiv) bulkDiv.style.display = data.items.length > 0 ? "flex" : "none";
-    $("#proposal-list").innerHTML = data.items.map(item => `
+    if (bulkDiv) bulkDiv.style.display = state.proposals.length > 0 ? "flex" : "none";
+    $("#proposal-list").innerHTML = state.proposals.map(item => `
       <article class="proposal-card" data-id="${escapeHtml(item.id)}">
         <label>${escapeHtml(item.type)}</label>
         <textarea class="proposal-content">${escapeHtml(item.content)}</textarea>
@@ -920,18 +922,55 @@ function bindEvents() {
   if ($("#model-status")) $("#model-status").onclick = () => { const provider = localStorage.getItem("ghostwriter:ai_provider") || "openrouter"; const m = localStorage.getItem("ghostwriter:openrouter_model"); const k = localStorage.getItem(`ghostwriter:key_${provider}`) || localStorage.getItem("ghostwriter:openrouter_key"); toast(m && k ? `${provider.toUpperCase()} · ${m}` : "AI belum dikonfigurasi — buka Pengaturan → Provider AI", m && k ? "success" : "error"); };
   if ($("#new-chat-button")) $("#new-chat-button").onclick = () => { resetChat(); closeSheet(); };
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && e.shiftKey) {
-      const el = e.target;
-      if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-        e.preventDefault();
-        const form = el.closest("form");
-        if (form) form.requestSubmit();
-        else if (el.id === "write-prompt") $("#generate-button").click();
-        else if (el.id === "raw-writing") $("#learn-raw-button").click();
-        else if (el.id === "compare-original" || el.id === "compare-edited") $("#compare-button").click();
-        else if (el.id === "reference-query") $("#reference-button").click();
-        else if (el.classList.contains("proposal-content")) el.closest(".proposal-card").querySelector(".approve-proposal").click();
-      }
+    const el = e.target;
+    const isTextField = el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT");
+    const isLikelyDesktop =
+      window.matchMedia("(hover: hover) and (pointer: fine)").matches ||
+      navigator.maxTouchPoints === 0 ||
+      window.innerWidth >= 1024;
+
+    if (!isTextField || !el) return;
+
+    const isEnter = e.key === "Enter" && !e.altKey && !e.ctrlKey && !e.metaKey;
+    const isSubmitField =
+      el.id === "chat-input" ||
+      el.id === "write-prompt" ||
+      el.id === "raw-writing" ||
+      el.id === "compare-original" ||
+      el.id === "compare-edited" ||
+      el.id === "reference-query";
+
+    if (isEnter && !e.shiftKey && isSubmitField) {
+      e.preventDefault();
+      if (el.id === "chat-input") el.closest("form")?.requestSubmit();
+      else if (el.id === "write-prompt") $("#generate-button")?.click();
+      else if (el.id === "raw-writing") $("#learn-raw-button")?.click();
+      else if (el.id === "compare-original" || el.id === "compare-edited") $("#compare-button")?.click();
+      else if (el.id === "reference-query") $("#reference-button")?.click();
+      return;
+    }
+
+    if (isEnter && !e.shiftKey && el.classList.contains("proposal-content")) {
+      e.preventDefault();
+      el.closest(".proposal-card")?.querySelector(".approve-proposal")?.click();
+      return;
+    }
+
+    if (isEnter && !e.shiftKey && el.tagName === "TEXTAREA" && !isLikelyDesktop) {
+      e.preventDefault();
+      const selectionStart = el.selectionStart;
+      const selectionEnd = el.selectionEnd;
+      el.value = `${el.value.slice(0, selectionStart)}\n${el.value.slice(selectionEnd)}`;
+      el.selectionStart = el.selectionEnd = selectionStart + 1;
+      return;
+    }
+
+    if (isEnter && e.shiftKey && el.tagName === "TEXTAREA") {
+      e.preventDefault();
+      const selectionStart = el.selectionStart;
+      const selectionEnd = el.selectionEnd;
+      el.value = `${el.value.slice(0, selectionStart)}\n${el.value.slice(selectionEnd)}`;
+      el.selectionStart = el.selectionEnd = selectionStart + 1;
     }
   });
 
@@ -1127,9 +1166,9 @@ function bindEvents() {
       const formData = new FormData();
       formData.append("file", file);
       const headers = {};
-      const token = localStorage.getItem("ghostwriter:token");
+      const token = localStorage.getItem("ghostwriter:session") || state.sessionToken;
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      
+
       const response = await fetch("/api/import", { method: "POST", headers, body: formData });
       if (!response.ok) throw await response.json().catch(() => ({message: `HTTP ${response.status}`}));
       toast("Impor berhasil! Memuat ulang...", "success");
@@ -1234,14 +1273,14 @@ window.editWorkspace = async function(id, oldName) {
   const newName = await showPrompt("Nama baru untuk workspace:", oldName);
   if (!newName || newName === oldName) return;
   try {
-    const res = await api("/api/workspace/rename", {
+    const result = await jsonApi("/api/workspace/rename", {
       method: "POST",
       body: { workspace_id: id, name: newName }
     });
-    if (res.status === "success") {
-      state.workspaces = await api("/api/system/workspaces");
+    if (result.status === "success") {
+      await loadWorkspaces();
       if (id === state.workspace) {
-        $("#workspace-title").textContent = newName;
+        $("#workspace-name").textContent = newName;
       }
       toast("Workspace diubah namanya");
       showWorkspaceSheet();
@@ -1255,12 +1294,12 @@ window.deleteWorkspace = async function(id) {
   closeSheet();
   if (!confirm("Hapus workspace ini beserta seluruh isinya secara permanen?")) return;
   try {
-    const res = await api("/api/workspace/delete", {
+    const result = await jsonApi("/api/workspace/delete", {
       method: "POST",
       body: { workspace_id: id }
     });
-    if (res.status === "success") {
-      state.workspaces = await api("/api/system/workspaces");
+    if (result.status === "success") {
+      await loadWorkspaces();
       if (id === state.workspace) {
         await switchWorkspace("writing");
       }
@@ -1275,12 +1314,12 @@ window.editBrainItem = async function(type, idOrContent, currentContent) {
   const newContent = await showPrompt("Edit konten:", currentContent || idOrContent);
   if (!newContent || newContent === (currentContent || idOrContent)) return;
   try {
-    await api("/api/brain/item/update", {
+    await jsonApi("/api/brain/item/update", {
       method: "POST",
       body: { workspace_id: state.workspace, type, id_or_content: idOrContent, new_content: newContent }
     });
     toast("Item diperbarui");
-    loadProfile();
+    await loadBrain();
   } catch (err) {
     toast(err.message, "error");
   }
@@ -1289,43 +1328,41 @@ window.editBrainItem = async function(type, idOrContent, currentContent) {
 window.deleteBrainItem = async function(type, idOrContent) {
   if (!confirm("Hapus item ini?")) return;
   try {
-    await api("/api/brain/item/delete", {
+    await jsonApi("/api/brain/item/delete", {
       method: "POST",
       body: { workspace_id: state.workspace, type, id_or_content: idOrContent }
     });
     toast("Item dihapus");
-    loadProfile();
+    await loadBrain();
   } catch (err) {
     toast(err.message, "error");
   }
 };
 
 window.bulkApproveProposals = async function() {
-  const ids = (state.brain.proposals || []).map(p => p.id);
+  const ids = state.proposals.map(p => p.id);
   if (!ids.length) return;
   try {
-    await api("/api/brain/proposals/bulk", {
+    await jsonApi("/api/brain/proposals/bulk", {
       method: "POST",
       body: { workspace_id: state.workspace, action: "approve", proposal_ids: ids }
     });
     toast("Semua proposal disetujui");
-    loadProfile();
+    await loadProposals();
+    await loadBrain();
   } catch (err) {
     toast(err.message, "error");
   }
 };
 
 window.bulkRejectProposals = async function() {
-  const ids = (state.brain.proposals || []).map(p => p.id);
+  const ids = state.proposals.map(p => p.id);
   if (!ids.length) return;
   try {
-    await api("/api/brain/proposals/bulk", {
+    await jsonApi("/api/brain/proposals/bulk", {
       method: "POST",
       body: { workspace_id: state.workspace, action: "reject", proposal_ids: ids }
     });
     toast("Semua proposal ditolak");
-    loadProfile();
-  } catch (err) {
-    toast(err.message, "error");
-  }
-};
+    await loadProposals();
+    await loadBrain();
