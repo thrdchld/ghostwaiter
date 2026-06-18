@@ -80,10 +80,17 @@ class ProposalBulkRequest(WorkspaceRequest):
     action: Literal["approve", "reject"]
     proposal_ids: list[str]
 
+class ChatAttachment(BaseModel):
+    name: str
+    size: int
+    type: str
+    content: str  # Base64 data or text content
+
 class ChatRequest(BaseModel):
     workspace_id: str
     message: str = Field(min_length=1)
     chat_id: str | None = None
+    attachments: list[ChatAttachment] | None = None
 
 
 class ChatIdRequest(BaseModel):
@@ -485,8 +492,20 @@ async def _analyze_chat_background(workspace: str, chat_id: str, api_key: str, m
         return
 
 
-async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str, api_key: str, model: str, provider: str = "openrouter"):
-    chat["messages"].append({"role": "user", "content": user_message, "timestamp": now_iso()})
+async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str, api_key: str, model: str, provider: str = "openrouter", attachments: list[ChatAttachment] | None = None):
+    user_msg_obj = {"role": "user", "content": user_message, "timestamp": now_iso()}
+    if attachments:
+        user_msg_obj["attachments"] = [
+            {
+                "name": att.name,
+                "size": att.size,
+                "type": att.type,
+                "content": att.content
+            }
+            for att in attachments
+        ]
+    chat["messages"].append(user_msg_obj)
+    
     app_context, accessed_workspaces = build_chat_context(workspace, user_message)
     chat["accessed_workspaces"] = accessed_workspaces
     messages = [{"role": "system", "content": _brain_system_prompt(workspace, "chat", app_context, model)}]
@@ -494,11 +513,35 @@ async def _chat_stream(workspace: str, chat: dict[str, Any], user_message: str, 
         messages.append(
             {"role": "system", "content": f"Previous conversation summary:\n{chat['summary']}"}
         )
-    messages.extend(
-        {"role": item["role"], "content": item["content"]}
-        for item in chat["messages"][-14:]
-        if item["role"] in {"user", "assistant"}
-    )
+    
+    for item in chat["messages"][-14:]:
+        if item.get("role") not in {"user", "assistant"}:
+            continue
+        
+        role = item["role"]
+        content = item["content"]
+        
+        item_attachments = item.get("attachments", [])
+        if item_attachments:
+            content_list = [{"type": "text", "text": content}]
+            for att in item_attachments:
+                if att.get("type", "").startswith("image/"):
+                    img_type = att.get("type", "image/jpeg")
+                    img_data = att.get("content", "")
+                    if not img_data.startswith("data:"):
+                        img_data = f"data:{img_type};base64,{img_data}"
+                    content_list.append({
+                        "type": "image_url",
+                        "image_url": {"url": img_data}
+                    })
+                else:
+                    file_name = att.get("name", "file")
+                    file_content = att.get("content", "")
+                    content_list[0]["text"] += f"\n\n[Attached File: {file_name}]\n---\n{file_content}\n---"
+            messages.append({"role": role, "content": content_list})
+        else:
+            messages.append({"role": role, "content": content})
+            
     chunks: list[str] = []
     try:
         async for text in ai_service.stream(api_key, model, messages, provider=provider):
@@ -559,7 +602,7 @@ def send_chat(req: ChatRequest, auth: tuple[str, str, str] = Depends(get_or_auth
             "accessed_workspaces": [],
         }
     return StreamingResponse(
-        _chat_stream(workspace, chat, req.message, auth[0], auth[1], auth[2]),
+        _chat_stream(workspace, chat, req.message, auth[0], auth[1], auth[2], req.attachments),
         media_type="text/plain; charset=utf-8",
         headers={"X-Chat-Id": chat["id"], "Cache-Control": "no-cache"},
     )

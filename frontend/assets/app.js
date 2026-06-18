@@ -16,6 +16,10 @@ const state = {
   deferredInstall: null,
   sessionToken: localStorage.getItem("ghostwriter:session") || "",
   markdownBuffer: "",
+  attachments: [],
+  autoScrollActive: true,
+  lastSentMessage: null,
+  aiStatusTimer: null,
 };
 
 async function api(path, options = {}) {
@@ -122,76 +126,82 @@ function escapeHtml(value = "") {
   return String(value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[char]));
 }
 
-function inlineMarkdown(value) {
-  let output = value;
-  output = output.replace(/`([^`]+)`/g, "<code>$1</code>");
-  output = output.replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>");
-  output = output.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  output = output.replace(/__([^_]+)__/g, "<strong>$1</strong>");
-  output = output.replace(/(^|[\s(])\*([^*\n]+)\*/g, "$1<em>$2</em>");
-  output = output.replace(/(^|[\s(])_([^_\n]+)_/g, "$1<em>$2</em>");
-  output = output.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (match, label, value) => {
-    if (/&(?:quot|#x?0*22|apos|#x?0*27);/i.test(value)) return match;
-    try {
-      const url = new URL(value.replaceAll("&amp;", "&"));
-      if (!["http:", "https:"].includes(url.protocol)) return match;
-      return `<a href="${escapeHtml(url.href)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-    } catch (_) {
-      return match;
+// Custom marked and code handlers
+if (typeof marked !== 'undefined') {
+  const renderer = new marked.Renderer();
+  
+  renderer.code = function(code, infostring) {
+    const language = infostring || 'plaintext';
+    const escapedCode = String(code).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[char]));
+    
+    let highlighted = escapedCode;
+    if (typeof hljs !== 'undefined') {
+      try {
+        const langObj = hljs.getLanguage(language);
+        if (langObj) {
+          highlighted = hljs.highlight(code, { language }).value;
+        } else {
+          highlighted = hljs.highlightAuto(code).value;
+        }
+      } catch (e) {}
     }
-  });
-  return output;
+    
+    return `
+      <div class="code-block-container">
+        <div class="code-block-header">
+          <span class="code-block-lang">${language}</span>
+          <div class="code-block-actions">
+            <button class="code-block-action-btn wrap-btn" type="button" onclick="toggleCodeWrap(this)">Wrap</button>
+            <button class="code-block-action-btn copy-btn" type="button" onclick="copyCodeText(this)">Copy Code</button>
+          </div>
+        </div>
+        <pre class="language-${language}"><code class="language-${language}">${highlighted}</code></pre>
+      </div>
+    `;
+  };
+  
+  renderer.table = function(header, body) {
+    return `
+      <div class="table-container">
+        <table>
+          <thead>${header}</thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>
+    `;
+  };
+  
+  marked.use({ renderer });
 }
+
+window.copyCodeText = function(button) {
+  const container = button.closest('.code-block-container');
+  const code = container.querySelector('pre code').innerText;
+  navigator.clipboard.writeText(code).then(() => {
+    button.textContent = "Copied!";
+    setTimeout(() => {
+      button.textContent = "Copy Code";
+    }, 2000);
+  });
+};
+
+window.toggleCodeWrap = function(button) {
+  const container = button.closest('.code-block-container');
+  const pre = container.querySelector('pre');
+  pre.classList.toggle('word-wrap');
+  if (pre.classList.contains('word-wrap')) {
+    button.textContent = "Unwrap";
+  } else {
+    button.textContent = "Wrap";
+  }
+};
 
 function renderMarkdown(source = "") {
   source = source.replace(/<think>[\s\S]*?(<\/think>|$)/gi, '');
-  const escaped = escapeHtml(source).replace(/\r\n?/g, "\n");
-  const codeBlocks = [];
-  const withoutCode = escaped.replace(/```([\w-]*)\n?([\s\S]*?)```/g, (_, language, code) => {
-    const index = codeBlocks.length;
-    codeBlocks.push(`<pre><code class="language-${language}">${code.trim()}</code></pre>`);
-    return `@@CODEBLOCK_${index}@@`;
-  });
-  const lines = withoutCode.split("\n");
-  const output = [];
-  let listType = "";
-  const closeList = () => {
-    if (listType) output.push(`</${listType}>`);
-    listType = "";
-  };
-  for (const line of lines) {
-    const codeMatch = line.match(/^@@CODEBLOCK_(\d+)@@$/);
-    if (codeMatch) {
-      closeList();
-      output.push(codeBlocks[Number(codeMatch[1])]);
-      continue;
-    }
-    const heading = line.match(/^(#{1,3})\s+(.+)$/);
-    if (heading) {
-      closeList();
-      const level = heading[1].length;
-      output.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
-      continue;
-    }
-    const unordered = line.match(/^\s*[-+*]\s+(.+)$/);
-    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
-    if (unordered || ordered) {
-      const type = unordered ? "ul" : "ol";
-      if (listType !== type) {
-        closeList();
-        output.push(`<${type}>`);
-        listType = type;
-      }
-      output.push(`<li>${inlineMarkdown((unordered || ordered)[1])}</li>`);
-      continue;
-    }
-    closeList();
-    if (/^\s*---+\s*$/.test(line)) output.push("<hr>");
-    else if (line.startsWith("&gt; ")) output.push(`<blockquote>${inlineMarkdown(line.slice(5))}</blockquote>`);
-    else if (line.trim()) output.push(`<p>${inlineMarkdown(line)}</p>`);
+  if (typeof marked !== 'undefined') {
+    return marked.parse(source);
   }
-  closeList();
-  return output.join("");
+  return "<p>" + escapeHtml(source).replace(/\n/g, "<br>") + "</p>";
 }
 
 function openSheet(title, html) {
@@ -241,6 +251,7 @@ async function initialize() {
   await loadWorkspaces();
   await Promise.all([loadSyncStatus()]);
   restoreLocalDraft();
+  restoreChatDraft();
   updateModelIndicator();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/service-worker.js");
 }
@@ -331,24 +342,301 @@ async function createWorkspace(customName = null) {
   }
 }
 
-function appendMessage(role, content = "") {
+// Attachment state and handlers
+async function handleAttachmentSelect(event) {
+  const files = Array.from(event.target.files);
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
+  for (const file of files) {
+    if (file.size > MAX_FILE_SIZE) {
+      toast(`File ${file.name} is too large (max 5MB)`, "error");
+      continue;
+    }
+    if (state.attachments.some(a => a.name === file.name && a.size === file.size)) continue;
+    
+    const attachment = {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      content: ""
+    };
+    
+    try {
+      if (file.type.startsWith("image/")) {
+        attachment.content = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (e) => reject(new Error("Failed to read image"));
+          reader.readAsDataURL(file);
+        });
+      } else {
+        attachment.content = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (e) => reject(new Error("Failed to read file"));
+          reader.readAsText(file);
+        });
+      }
+      state.attachments.push(attachment);
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  }
+  
+  event.target.value = ""; // Reset file input
+  renderAttachmentPreviews();
+  saveChatDraft();
+}
+
+function renderAttachmentPreviews() {
+  const container = $("#attachment-previews");
+  if (!container) return;
+  
+  if (state.attachments.length === 0) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+  
+  container.classList.remove("hidden");
+  container.innerHTML = state.attachments.map((att, idx) => {
+    if (att.type.startsWith("image/")) {
+      return `
+        <div class="attachment-preview-card image-preview" data-idx="${idx}">
+          <img src="${att.content}" alt="${escapeHtml(att.name)}">
+          <button class="remove-attachment-btn" type="button" aria-label="Remove attachment" onclick="removeAttachment(${idx})">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      `;
+    } else {
+      const sizeStr = (att.size / 1024).toFixed(1) + " KB";
+      const fileExt = att.name.split('.').pop().toUpperCase();
+      return `
+        <div class="attachment-preview-card file-preview" data-idx="${idx}">
+          <div class="file-icon-badge">${fileExt}</div>
+          <div class="file-details">
+            <span class="file-name" title="${escapeHtml(att.name)}">${escapeHtml(att.name)}</span>
+            <span class="file-meta">${sizeStr}</span>
+          </div>
+          <button class="remove-attachment-btn" type="button" aria-label="Remove attachment" onclick="removeAttachment(${idx})">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      `;
+    }
+  }).join("");
+}
+
+window.removeAttachment = function(idx) {
+  state.attachments.splice(idx, 1);
+  renderAttachmentPreviews();
+  saveChatDraft();
+};
+
+// Draft saving functions
+function saveChatDraft() {
+  const text = $("#chat-input")?.value || "";
+  const draftKey = `ghostwriter:chat_draft:${state.currentChat || "new"}`;
+  localStorage.setItem(draftKey, JSON.stringify({
+    text: text,
+    attachments: state.attachments
+  }));
+}
+
+function restoreChatDraft() {
+  const draftKey = `ghostwriter:chat_draft:${state.currentChat || "new"}`;
+  const saved = localStorage.getItem(draftKey);
+  const container = $("#attachment-previews");
+  if (!saved) {
+    state.attachments = [];
+    if ($("#chat-input")) $("#chat-input").value = "";
+    if (container) {
+      container.classList.add("hidden");
+      container.innerHTML = "";
+    }
+    autoResizeChatInput();
+    return;
+  }
+  try {
+    const data = JSON.parse(saved);
+    state.attachments = data.attachments || [];
+    if ($("#chat-input")) $("#chat-input").value = data.text || "";
+    renderAttachmentPreviews();
+    autoResizeChatInput();
+  } catch (e) {
+    state.attachments = [];
+    if ($("#chat-input")) $("#chat-input").value = "";
+  }
+}
+
+function clearChatDraft() {
+  const draftKey = `ghostwriter:chat_draft:${state.currentChat || "new"}`;
+  localStorage.removeItem(draftKey);
+  state.attachments = [];
+  renderAttachmentPreviews();
+}
+
+// AI Activity Status management
+function updateAiStatus(status) {
+  const container = $("#ai-status-container");
+  const text = $("#ai-status-text");
+  if (!container || !text) return;
+  
+  if (!status) {
+    container.classList.add("hidden");
+    return;
+  }
+  
+  text.textContent = status;
+  container.classList.remove("hidden");
+}
+
+function setAiStatusWithTransitions(hasImages, hasFiles) {
+  clearTimeout(state.aiStatusTimer);
+  
+  let initial = "Preparing response...";
+  if (hasImages) initial = "Processing uploaded image...";
+  else if (hasFiles) initial = "Reading attached file...";
+  
+  updateAiStatus(initial);
+  
+  state.aiStatusTimer = setTimeout(() => {
+    updateAiStatus("Retrieving context...");
+    state.aiStatusTimer = setTimeout(() => {
+      updateAiStatus("Searching knowledge sources...");
+    }, 1200);
+  }, 1000);
+}
+
+function clearAiStatus() {
+  clearTimeout(state.aiStatusTimer);
+  updateAiStatus("Finalizing response...");
+  setTimeout(() => updateAiStatus(null), 500);
+}
+
+// Auto scroll management
+function scrollToBottom(smooth = true) {
+  const msgs = $("#chat-messages");
+  if (!msgs) return;
+  msgs.scrollTo({
+    top: msgs.scrollHeight,
+    behavior: smooth ? "smooth" : "auto"
+  });
+}
+
+function initScrollSystem() {
+  const msgs = $("#chat-messages");
+  const scrollBtn = $("#scroll-bottom-btn");
+  if (!msgs || !scrollBtn) return;
+  
+  msgs.addEventListener("scroll", () => {
+    // Check if user is near the bottom
+    const isAtBottom = msgs.scrollTop + msgs.clientHeight >= msgs.scrollHeight - 30;
+    state.autoScrollActive = isAtBottom;
+    
+    if (isAtBottom) {
+      scrollBtn.classList.add("hidden");
+    } else {
+      scrollBtn.classList.remove("hidden");
+    }
+  });
+  
+  scrollBtn.onclick = () => {
+    scrollToBottom(true);
+  };
+}
+
+// Custom copy handlers and rendering
+window.copyMessageText = function(button) {
+  const messageNode = button.closest('.message');
+  const text = messageNode.querySelector('.msg-content').innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Message copied', 'success');
+  });
+};
+
+function appendMessage(role, content = "", attachments = null) {
   const messages = $("#chat-messages");
   if (messages.querySelector(".empty-state")) messages.innerHTML = "";
+  
   const node = document.createElement("div");
-  node.className = `message ${role}`;
+  node.className = `message-wrapper ${role}`;
+  
+  let attachmentsHtml = "";
+  if (attachments && attachments.length > 0) {
+    attachmentsHtml = `<div class="message-attachments">` + attachments.map(att => {
+      if (att.type.startsWith("image/")) {
+        return `<div class="msg-attachment-card image-card"><img src="${att.content}" alt="${escapeHtml(att.name)}" onclick="openImageModal('${att.content}')"></div>`;
+      } else {
+        const sizeStr = (att.size / 1024).toFixed(1) + " KB";
+        const fileExt = att.name.split('.').pop().toUpperCase();
+        return `
+          <div class="msg-attachment-card file-card">
+            <div class="file-badge">${fileExt}</div>
+            <div class="file-info">
+              <span class="file-title" title="${escapeHtml(att.name)}">${escapeHtml(att.name)}</span>
+              <span class="file-size">${sizeStr}</span>
+            </div>
+          </div>
+        `;
+      }
+    }).join("") + `</div>`;
+  }
+  
   if (role === "assistant") {
-    node.innerHTML = `<div class="msg-content">${renderMarkdown(content)}</div><button class="chat-copy-btn" type="button" aria-label="Copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText.trim()); toast('Message copied', 'success')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>`;
+    node.innerHTML = `
+      <div class="message assistant">
+        <div class="msg-content">${renderMarkdown(content)}</div>
+        ${attachmentsHtml}
+        <div class="message-actions">
+          <button class="message-action-btn copy-btn" type="button" onclick="copyMessageText(this)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+      </div>
+    `;
   } else {
-    node.innerHTML = `<div class="msg-content"></div><button class="chat-copy-btn" type="button" aria-label="Copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText.trim()); toast('Message copied', 'success')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>`;
+    node.innerHTML = `
+      <div class="message user">
+        <div class="msg-content"></div>
+        ${attachmentsHtml}
+        <div class="message-actions">
+          <button class="message-action-btn copy-btn" type="button" onclick="copyMessageText(this)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+      </div>
+    `;
     node.querySelector('.msg-content').textContent = content;
   }
+  
   messages.appendChild(node);
-  node.scrollIntoView({behavior: "smooth", block: "end"});
+  
+  if (state.autoScrollActive) {
+    scrollToBottom(true);
+  }
   return node;
 }
 
+window.openImageModal = function(src) {
+  const modal = document.createElement("div");
+  modal.className = "image-lightbox-modal";
+  modal.innerHTML = `
+    <div class="lightbox-backdrop" onclick="this.parentNode.remove()"></div>
+    <div class="lightbox-content">
+      <img src="${src}" alt="Attached Image">
+      <button class="lightbox-close-btn" onclick="this.parentNode.parentNode.remove()">&times;</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+};
+
+// Send and Retry operations
 async function sendChat(event) {
-  event.preventDefault();
+  if (event) event.preventDefault();
+  
   const input = $("#chat-input");
   const message = input.value.trim();
   
@@ -357,56 +645,129 @@ async function sendChat(event) {
     return;
   }
   
-  if (!message) return;
-  appendMessage("user", message);
-  input.value = "";
-  input.style.height = "auto";
-  const assistant = appendMessage("assistant", "");
-  let fullResponse = "";
+  if (!message && state.attachments.length === 0) return;
   
+  // Hide error container
+  const errorContainer = $("#chat-error-container");
+  if (errorContainer) errorContainer.classList.add("hidden");
+  
+  // Save message details for retry
+  state.lastSentMessage = {
+    message,
+    attachments: [...state.attachments]
+  };
+  
+  // Add user message to display
+  appendMessage("user", message, state.attachments);
+  
+  // Clear input composer and draft
+  input.value = "";
+  clearChatDraft();
+  autoResizeChatInput();
+  
+  // Update Send button to Stop
   const sendBtn = $("#chat-send");
-  sendBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>';
+  sendBtn.classList.add("stop-mode");
+  sendBtn.innerHTML = '<svg id="stop-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
   sendBtn.setAttribute("aria-label", "Stop");
   
+  // Show status area and set status
+  const hasImages = state.lastSentMessage.attachments.some(a => a.type.startsWith("image/"));
+  const hasFiles = state.lastSentMessage.attachments.some(a => !a.type.startsWith("image/"));
+  setAiStatusWithTransitions(hasImages, hasFiles);
+  
+  const assistant = appendMessage("assistant", "");
+  assistant.querySelector('.message').classList.add("generating");
+  
+  let fullResponse = "";
   chatAbortController = new AbortController();
-
+  
   try {
+    // Format attachments payload
+    const attachmentsPayload = state.lastSentMessage.attachments.map(att => {
+      let cleanContent = att.content;
+      if (att.type.startsWith("image/") && cleanContent.includes("base64,")) {
+        cleanContent = cleanContent.split("base64,").pop();
+      }
+      return {
+        name: att.name,
+        size: att.size,
+        type: att.type,
+        content: cleanContent
+      };
+    });
+    
     const response = await api("/api/chat/send", {
       method: "POST",
-      body: {workspace_id: state.workspace, chat_id: state.currentChat, message},
+      body: {
+        workspace_id: state.workspace,
+        chat_id: state.currentChat,
+        message,
+        attachments: attachmentsPayload.length > 0 ? attachmentsPayload : null
+      },
       signal: chatAbortController.signal,
     });
+    
     state.currentChat = response.headers.get("X-Chat-Id");
-    if ($("#chat-title").textContent === "New Chat" || $("#chat-title").textContent === "Chat Baru") $("#chat-title").textContent = message.slice(0, 60);
+    if ($("#chat-title").textContent === "New Chat" || $("#chat-title").textContent === "Chat Baru") {
+      $("#chat-title").textContent = message ? message.slice(0, 60) : "Image/File Chat";
+    }
+    
+    // Clear status timer and set generating
+    clearTimeout(state.aiStatusTimer);
+    updateAiStatus("Generating response...");
+    
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    let chunkCount = 0;
+    
     while (true) {
       const {value, done} = await reader.read();
       if (done) break;
+      
+      chunkCount++;
+      if (chunkCount === 50) {
+        updateAiStatus("Formatting answer...");
+      }
+      
       fullResponse += decoder.decode(value, {stream: true});
       assistant.querySelector(".msg-content").innerHTML = renderMarkdown(fullResponse);
-      // Smooth auto-scroll: forcefully scroll to bottom during streaming
-      const msgs = $("#chat-messages");
-      msgs.scrollTop = msgs.scrollHeight;
+      
+      if (state.autoScrollActive) {
+        scrollToBottom(true);
+      }
     }
+    
+    assistant.querySelector('.message').classList.remove("generating");
+    clearAiStatus();
   } catch (error) {
+    assistant.remove(); // Remove empty/failed assistant bubble
+    
     if (error.name === "AbortError") {
       toast("Cancelled");
-    } else if (error.message.includes("Semua model inference gagal")) {
-      if (!fullResponse.trim()) assistant.querySelector(".msg-content").innerHTML = renderMarkdown("*(AI network busy, please try again later)*");
+      clearAiStatus();
     } else {
-      if (fullResponse.trim()) {
-        toast(`Connection lost: ${error.message}`, "error");
-      } else {
-        assistant.querySelector(".msg-content").innerHTML = renderMarkdown(`**Error:** ${error.message}`);
+      clearAiStatus();
+      // Show professional error card instead of polluting history
+      if (errorContainer) {
+        $("#chat-error-text").textContent = error.message || "Failed to generate response.";
+        errorContainer.classList.remove("hidden");
+        scrollToBottom(true);
       }
+      
+      // Restore the draft text so it's not lost
+      input.value = message;
+      state.attachments = state.lastSentMessage.attachments;
+      renderAttachmentPreviews();
+      autoResizeChatInput();
     }
   } finally {
     chatAbortController = null;
-    const sendBtn = $("#chat-send");
-    sendBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+    sendBtn.classList.remove("stop-mode");
+    sendBtn.innerHTML = '<svg id="send-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
     sendBtn.setAttribute("aria-label", "Send");
-    sendBtn.disabled = false;
+    
+    // Retrieve proposals background task
     setTimeout(async () => {
       const previous = state.brain?.pending_proposals || 0;
       try {
@@ -419,10 +780,42 @@ async function sendChat(event) {
   }
 }
 
+window.retrySendChat = function() {
+  if (!state.lastSentMessage) return;
+  
+  // Hide error container
+  const errorContainer = $("#chat-error-container");
+  if (errorContainer) errorContainer.classList.add("hidden");
+  
+  // Delete the last user message from UI since sendChat will append it again
+  const messages = $("#chat-messages");
+  const wrappers = messages.querySelectorAll(".message-wrapper");
+  if (wrappers.length > 0) {
+    const lastWrapper = wrappers[wrappers.length - 1];
+    if (lastWrapper.classList.contains("user")) {
+      lastWrapper.remove();
+    }
+  }
+  
+  // Set input values to last sent values and trigger sendChat
+  $("#chat-input").value = state.lastSentMessage.message;
+  state.attachments = state.lastSentMessage.attachments;
+  
+  sendChat();
+};
+
 function resetChat() {
   state.currentChat = null;
   $("#chat-title").textContent = "New Chat";
   $("#chat-messages").innerHTML = `<div class="empty-state"><strong>Start with an idea.</strong><span>Discuss concepts, structure arguments, or ask for feedback.</span></div>`;
+  
+  // Hide error and status
+  const errorContainer = $("#chat-error-container");
+  if (errorContainer) errorContainer.classList.add("hidden");
+  updateAiStatus(null);
+  
+  clearChatDraft();
+  restoreChatDraft();
 }
 
 async function showChatList() {
@@ -491,8 +884,16 @@ async function loadChat(id) {
   state.currentChat = id;
   $("#chat-title").textContent = chat.title;
   $("#chat-messages").innerHTML = "";
-  chat.messages.forEach(message => appendMessage(message.role, message.content));
+  
+  // Hide error and status
+  const errorContainer = $("#chat-error-container");
+  if (errorContainer) errorContainer.classList.add("hidden");
+  updateAiStatus(null);
+  
+  chat.messages.forEach(message => appendMessage(message.role, message.content, message.attachments));
   closeSheet();
+  
+  restoreChatDraft();
 }
 
 async function generateWriting() {
@@ -1175,27 +1576,48 @@ function bindEvents() {
   $("#backdrop").onclick = closeSheet;
   $("#chat-form").onsubmit = sendChat;
 
-  // ── Chat input: auto-resize + empty-state show/hide + caret scroll ───
+  // Scroll system setup
+  initScrollSystem();
+
+  // Attachment upload triggers
+  const attachButton = $("#attach-button");
+  const attachmentInput = $("#attachment-input");
+  if (attachButton && attachmentInput) {
+    attachButton.onclick = () => attachmentInput.click();
+    attachmentInput.onchange = handleAttachmentSelect;
+  }
+
+  // Error retry trigger
+  const retryBtn = $("#chat-retry-btn");
+  if (retryBtn) {
+    retryBtn.onclick = () => retrySendChat();
+  }
+
+  // Chat input resize & save draft
   const chatInput = $("#chat-input");
   if (chatInput) {
-    function autoResizeChatInput() {
+    window.autoResizeChatInput = function() {
       chatInput.style.height = "auto";
-      chatInput.style.height = Math.min(chatInput.scrollHeight, 150) + "px";
-      // Keep caret visible while typing (scroll textarea to cursor)
-      const lineHeight = parseFloat(getComputedStyle(chatInput).lineHeight) || 22;
-      const lines = chatInput.value.slice(0, chatInput.selectionEnd).split("\n");
-      const cursorY = lines.length * lineHeight;
-      if (cursorY > chatInput.scrollTop + chatInput.clientHeight) {
-        chatInput.scrollTop = cursorY - chatInput.clientHeight + lineHeight;
+      const scrollHeight = chatInput.scrollHeight;
+      const maxHeight = 180; // approx 8 lines
+      if (scrollHeight > maxHeight) {
+        chatInput.style.height = maxHeight + "px";
+        chatInput.style.overflowY = "auto";
+      } else {
+        chatInput.style.height = scrollHeight + "px";
+        chatInput.style.overflowY = "hidden";
       }
-    }
+    };
+    
     chatInput.addEventListener("input", () => {
       autoResizeChatInput();
-      // Show/hide empty-state based on whether input is empty
+      saveChatDraft();
+      
+      // Show/hide empty state
       const msgs = $("#chat-messages");
       if (!msgs) return;
       const isEmpty = chatInput.value.trim() === "";
-      const hasMessages = msgs.querySelector(".message");
+      const hasMessages = msgs.querySelector(".message-wrapper");
       const emptyState = msgs.querySelector(".empty-state");
       if (!hasMessages) {
         if (!isEmpty && emptyState) {
@@ -1295,10 +1717,7 @@ function bindEvents() {
       $("#login-error").textContent = error.message;
     }
   };
-  $("#chat-input").addEventListener("input", event => {
-    event.target.style.height = "auto";
-    event.target.style.height = `${Math.min(event.target.scrollHeight, 130)}px`;
-  });
+
   window.addEventListener("beforeinstallprompt", event => {
     event.preventDefault();
     state.deferredInstall = event;
