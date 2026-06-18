@@ -93,7 +93,28 @@
 }
 
 /* ─── Reset & Base ──────────────────────────────────────────────────────── */
-* { box-sizing: border-box; }
+/* Custom Scrollbars to match theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* Firefox scrollbar styling */
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
 html {
   background: var(--bg-base);
   color: var(--text-primary);
@@ -169,9 +190,36 @@ button:active { transform: translateY(0); }
   color: var(--text-primary);
   letter-spacing: -0.02em;
 }
-.sidebar.minimized .app-branding { display: none !important; }
-.sidebar.minimized .nav-label { display: none !important; }
-.sidebar.minimized .sidebar-header { justify-content: center !important; padding: 0 !important; }
+.app-branding {
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+.sidebar.minimized .app-branding {
+  opacity: 0;
+  width: 0;
+  margin-left: 0 !important;
+  pointer-events: none;
+}
+.nav-label {
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  display: inline-block;
+}
+.sidebar.minimized .nav-label {
+  opacity: 0;
+  width: 0;
+  pointer-events: none;
+}
+#theme-detail {
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  display: inline-block;
+}
+.sidebar.minimized #theme-detail {
+  opacity: 0;
+  width: 0;
+  pointer-events: none;
+}
 #icon-expand { display: none; }
 .sidebar.minimized #icon-collapse { display: none !important; }
 .sidebar.minimized #icon-expand { display: block !important; }
@@ -235,14 +283,7 @@ button:active { transform: translateY(0); }
   color: var(--text-primary);
 }
 
-/* sidebar minimized: icon-only centering */
-.sidebar.minimized .nav-item {
-  justify-content: center;
-  padding: 12px;
-}
-.sidebar.minimized .nav-item span:first-child {
-  margin-right: 0;
-}
+/* sidebar minimized: transitions handled smoothly by layout dimensions, preventing jumping */
 
 /* ─── Main Wrapper ──────────────────────────────────────────────────────── */
 .main-wrapper {
@@ -412,6 +453,22 @@ button:active { transform: translateY(0); }
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   background: var(--bg-base);
+}
+.title-toggle-icon {
+  background: transparent;
+  border: 0;
+  color: var(--text-tertiary);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s, color 0.2s;
+  width: 16px;
+  height: 16px;
+}
+.title-toggle-icon:hover {
+  color: var(--text-primary);
 }
 .chat-messages {
   flex: 1;
@@ -1426,6 +1483,14 @@ select:focus, input:focus, textarea:focus { border-color: var(--border-strong); 
   color: var(--text-primary);
 }
 .sheet-option:hover { background: var(--bg-hover); }
+.sheet-option.active {
+  background: var(--accent-soft) !important;
+  border-left: 3px solid var(--accent) !important;
+  padding-left: 13px !important;
+}
+.sheet-option.active strong {
+  color: var(--text-primary);
+}
 .sheet-option small {
   color: var(--text-secondary);
   display: block;

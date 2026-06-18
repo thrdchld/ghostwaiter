@@ -259,18 +259,43 @@ async function initialize() {
 let theme = localStorage.getItem("ghostwriter:theme") || "system";
 
 function applyTheme() {
+  const themeBtnSpan = $("#theme-button span:first-child");
   if (theme === "system") {
     document.documentElement.removeAttribute("data-theme");
     if ($("#theme-detail")) $("#theme-detail").textContent = "Auto";
+    if (themeBtnSpan) {
+      themeBtnSpan.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/><path d="M19.07 4.93l-1.41 1.41M12 2v2M4.93 4.93l1.41 1.41M2 12h2M6.34 17.66l-1.41 1.41"/></svg>`;
+    }
   } else if (theme === "dark") {
     document.documentElement.setAttribute("data-theme", "dark");
     if ($("#theme-detail")) $("#theme-detail").textContent = "Dark";
+    if (themeBtnSpan) {
+      themeBtnSpan.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`;
+    }
   } else {
     document.documentElement.setAttribute("data-theme", "light");
     if ($("#theme-detail")) $("#theme-detail").textContent = "Light";
+    if (themeBtnSpan) {
+      themeBtnSpan.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`;
+    }
   }
   localStorage.setItem("ghostwriter:theme", theme);
 }
+
+window.toggleChatTitle = function() {
+  const title = $("#chat-title");
+  const btn = $("#toggle-title-btn");
+  if (!title) return;
+  title.classList.toggle("hidden");
+  
+  if (btn) {
+    if (title.classList.contains("hidden")) {
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>`;
+    } else {
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m18 15-6-6-6 6"/></svg>`;
+    }
+  }
+};
 
 function cycleTheme() {
   if (theme === "system") theme = "dark";
@@ -836,7 +861,7 @@ async function renderChatHistory(archived) {
   $("#archive-chat-tab").classList.toggle("active", archived);
   $("#chat-list-content").innerHTML = data.items.map(item => `
     <div class="chat-row">
-      <button class="sheet-option ${archived ? "" : "chat-option"}" data-id="${escapeHtml(item.id)}" type="button">
+      <button class="sheet-option ${archived ? "" : "chat-option"} ${item.id === state.currentChat ? "active" : ""}" data-id="${escapeHtml(item.id)}" type="button">
         <span><strong>${escapeHtml(item.title)}</strong><small>${item.messages.length} messages · ${new Date(item.updated_at).toLocaleString("en-US")}</small></span>
       </button>
       <div class="row-actions">

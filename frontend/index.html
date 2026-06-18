@@ -28,12 +28,12 @@
 
   <div id="app" class="app-shell hidden">
     <aside id="sidebar" class="sidebar expanded">
-      <div class="sidebar-header" style="justify-content: space-between;">
-        <div class="app-branding" style="font-family: Georgia, serif; font-size: 20px; font-weight: bold; margin-left: 4px; white-space: nowrap;">GhostWriter</div>
-        <button id="sidebar-toggle" class="icon-button" aria-label="Toggle Menu" style="padding:4px; flex-shrink: 0;">
+      <div class="sidebar-header">
+        <button id="sidebar-toggle" class="icon-button" aria-label="Toggle Menu" style="padding:4px; flex-shrink: 0; margin-right: 8px;">
           <svg id="icon-collapse" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M15 12H9"/><path d="M12 9l-3 3 3 3"/></svg>
           <svg id="icon-expand" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 12h6"/><path d="M12 9l3 3-3 3"/></svg>
         </button>
+        <div class="app-branding" style="font-family: Georgia, serif; font-size: 20px; font-weight: bold; margin-left: 4px; white-space: nowrap;">GhostWriter</div>
       </div>
       <nav class="sidebar-nav" style="flex: 1;">
         <button class="nav-item active" data-view="chat" type="button"><span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span class="nav-label">Chat</span></button>
@@ -71,7 +71,15 @@
       <main class="main">
       <section id="view-chat" class="view active" aria-label="Chat">
         <div class="section-heading">
-          <div><span class="eyebrow">Conversation</span><h1 id="chat-title">New Chat</h1></div>
+          <div>
+            <span class="eyebrow" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;" onclick="toggleChatTitle()">
+              Conversation
+              <span id="toggle-title-btn" class="title-toggle-icon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+              </span>
+            </span>
+            <h1 id="chat-title" class="hidden">New Chat</h1>
+          </div>
           <div style="display: flex; gap: 8px;">
             <button id="chat-list-button" class="icon-button" type="button" aria-label="Chat History">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v5l3 2"/><path d="M12 3a9 9 0 1 0 9 9"/></svg>
