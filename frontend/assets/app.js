@@ -647,7 +647,7 @@ async function trainRevision() {
   if (revised === state.originalAiText.trim()) return toast("No revisions to learn");
   const button = $("#train-button");
   button.disabled = true;
-  button.textContent = "Mempelajari...";
+  button.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/></svg> Mempelajari...`;
   try {
     const result = await jsonApi("/api/brain/learn/revision", {
       method: "POST",
@@ -659,7 +659,7 @@ async function trainRevision() {
     toast(error.message);
   } finally {
     button.disabled = false;
-    button.textContent = "Train";
+    button.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/></svg> Train`;
   }
 }
 

@@ -170,7 +170,8 @@ button:active { transform: translateY(0); }
   letter-spacing: -0.02em;
 }
 .sidebar.minimized .app-branding { display: none !important; }
-.sidebar.minimized .nav-label { opacity: 0; pointer-events: none; }
+.sidebar.minimized .nav-label { display: none !important; }
+.sidebar.minimized .sidebar-header { justify-content: center !important; padding: 0 !important; }
 #icon-expand { display: none; }
 .sidebar.minimized #icon-collapse { display: none !important; }
 .sidebar.minimized #icon-expand { display: block !important; }
@@ -635,10 +636,12 @@ select:focus, input:focus, textarea:focus { border-color: var(--border-strong); 
   padding-top: 16px;
   margin-top: 8px;
 }
+.editor-status-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .word-count {
-  margin-left: 16px;
-  padding-left: 16px;
-  border-left: 1px solid var(--border);
   opacity: 0.9;
 }
 
@@ -1114,12 +1117,13 @@ select:focus, input:focus, textarea:focus { border-color: var(--border-strong); 
 
   /* Backdrop: intercepts taps behind sidebar (Issue #4) */
   #sidebar-backdrop {
-    display: block !important;
+    display: none;
     z-index: 150; /* between sidebar (200) and main content */
     pointer-events: none; /* default: no blocking */
   }
-  /* When sidebar is open, backdrop is visible and blocks touches */
-  #sidebar-backdrop:not(.hidden) {
+  /* When sidebar is open (app-shell is not .sidebar-minimized), backdrop is visible and blocks touches */
+  .app-shell:not(.sidebar-minimized) #sidebar-backdrop {
+    display: block !important;
     pointer-events: all;
   }
 
