@@ -37,7 +37,7 @@ async def lifespan(_app: FastAPI):
             queue = store.read_json(store.root / "queue" / "pending_sync.json")
             if queue.get("items") and settings.github_token and settings.github_repo:
                 try:
-                    await _github_sync()
+                    await _github_push()
                 except Exception:
                     pass
 
@@ -1209,7 +1209,7 @@ def sync_queue() -> dict[str, Any]:
 
 @app.post("/api/sync/retry", dependencies=[Depends(require_auth)])
 async def retry_sync() -> dict[str, Any]:
-    return await run_sync()
+    return await run_sync_push()
 
 
 @app.post("/api/snapshot/create", dependencies=[Depends(require_auth)])

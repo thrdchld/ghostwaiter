@@ -40,15 +40,21 @@ class JsonStore:
         self._initialize()
 
     def _initialize(self) -> None:
-        for path in (
-            self.root / "system",
-            self.root / "workspaces",
-            self.root / "cache",
-            self.root / "queue",
-            self.root / "snapshots",
-            self.root / "archive",
-        ):
-            path.mkdir(parents=True, exist_ok=True)
+        try:
+            for path in (
+                self.root / "system",
+                self.root / "workspaces",
+                self.root / "cache",
+                self.root / "queue",
+                self.root / "snapshots",
+                self.root / "archive",
+            ):
+                path.mkdir(parents=True, exist_ok=True)
+        except PermissionError as exc:
+            raise PermissionError(
+                f"Tidak dapat menulis ke direktori data: {self.root}. "
+                "Harap periksa izin akses direktori penyimpanan persistent."
+            ) from exc
 
         timestamp = now_iso()
         self.ensure_json(

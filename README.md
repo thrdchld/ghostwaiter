@@ -8,13 +8,6 @@ app_port: 7860
 fullWidth: true
 pinned: false
 short_description: AI writing coach with memory
-models:
-  - OpenRouter
-  - Google Gemini
-  - Groq
-  - DeepSeek
-  - Mistral
-  - Kilo
 tags:
   - writing
   - pwa

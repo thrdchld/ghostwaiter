@@ -13,7 +13,7 @@ def _data_dir() -> Path:
     if configured:
         return Path(configured)
     persistent = Path("/data")
-    if persistent.exists() and os.access(persistent, os.W_OK):
+    if persistent.exists():
         return persistent / "ghostwriter"
     return ROOT_DIR / "data"
 
