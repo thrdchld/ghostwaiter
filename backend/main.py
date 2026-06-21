@@ -31,19 +31,7 @@ FRONTEND_DIR = ROOT_DIR / "frontend"
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    async def autosync_loop() -> None:
-        while True:
-            await asyncio.sleep(settings.sync_debounce_seconds)
-            queue = store.read_json(store.root / "queue" / "pending_sync.json")
-            if queue.get("items") and settings.github_token and settings.github_repo:
-                try:
-                    await _github_push()
-                except Exception:
-                    pass
-
-    task = asyncio.create_task(autosync_loop())
     yield
-    task.cancel()
 
 
 app = FastAPI(title="GhostWriter", version="1.0.0", docs_url="/api/docs", lifespan=lifespan)
@@ -975,7 +963,60 @@ def reject_learning_proposal(req: LearningProposalRequest) -> dict[str, Any]:
     return {"status": "success"}
 
 
-async def _github_push() -> tuple[bool, str]:
+@app.post("/api/brain/proposals/bulk", dependencies=[Depends(require_auth)])
+def bulk_proposals(req: ProposalBulkRequest) -> dict[str, Any]:
+    workspace = workspace_id(req.workspace_id)
+    path = store.workspace_path(workspace) / "brain" / "learning_proposals.json"
+    data = store.read_json(path)
+    
+    processed = 0
+    for pid in req.proposal_ids:
+        proposal = next((item for item in data.get("items", []) if item["id"] == pid), None)
+        if not proposal:
+            continue
+            
+        if req.action == "approve":
+            content = proposal["content"].strip()
+            proposal.update({"status": "approved", "updated_at": now_iso()})
+            brain = store.workspace_path(workspace) / "brain"
+            targets = {
+                "style": (brain / "style_profile.json", "rules"),
+                "thinking": (brain / "thinking_profile.json", "patterns"),
+                "memory": (brain / "memory.json", "items"),
+                "rule": (brain / "rules.json", "items"),
+            }
+            if proposal["type"] in targets:
+                target_path, key = targets[proposal["type"]]
+                target = store.read_json(target_path)
+                if proposal["type"] in {"memory", "rule"}:
+                    existing = {
+                        (item.get("content", "") if isinstance(item, dict) else str(item)).casefold()
+                        for item in target.get(key, [])
+                    }
+                    if content.casefold() not in existing:
+                        target.setdefault(key, []).append(
+                            {
+                                "id": new_id(proposal["type"]),
+                                "content": content,
+                                "source_chat_id": proposal.get("source_chat_id"),
+                                "created_at": now_iso(),
+                            }
+                        )
+                else:
+                    target[key] = list(dict.fromkeys(target.get(key, []) + [content]))[-100:]
+                store.write_json(target_path, target)
+                store.enqueue_sync("brain", workspace, {"proposal_id": proposal["id"], "status": "approved"})
+        elif req.action == "reject":
+            proposal.update({"status": "rejected", "updated_at": now_iso()})
+            
+        processed += 1
+        
+    store.write_json(path, data)
+    return {"status": "success", "processed": processed}
+
+
+
+async def _github_push_supabase() -> tuple[bool, str]:
     if not settings.github_token or not settings.github_repo:
         return False, "GITHUB_TOKEN or GITHUB_BACKUP_REPO is not configured"
     owner_repo = settings.github_repo.removeprefix("https://github.com/").removesuffix(".git").strip("/")
@@ -988,8 +1029,22 @@ async def _github_push() -> tuple[bool, str]:
         "X-GitHub-Api-Version": "2022-11-28",
     }
     
+    try:
+        workspaces_res = store.client.table("workspaces").select("id, data").execute()
+        chats_res = store.client.table("chats").select("id, history").execute()
+        drafts_res = store.client.table("drafts").select("id, content").execute()
+        
+        backup_data = {
+            "workspaces": workspaces_res.data,
+            "chats": chats_res.data,
+            "drafts": drafts_res.data,
+            "timestamp": now_iso()
+        }
+        content = json.dumps(backup_data, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return False, f"Failed to fetch data from Supabase: {e}"
+        
     async with httpx.AsyncClient(timeout=60, headers=headers) as client:
-        # 1. Get ref
         branch = "main"
         ref_url = f"https://api.github.com/repos/{owner_repo}/git/ref/heads/{branch}"
         ref_res = await client.get(ref_url)
@@ -999,13 +1054,12 @@ async def _github_push() -> tuple[bool, str]:
             ref_res = await client.get(ref_url)
             
         if ref_res.status_code != 200:
-            if ref_res.status_code == 409 or ref_res.status_code == 404: # empty repo
-                return False, "Repositori kosong atau tidak ada cabang main/master. Harap inisialisasi repositori terlebih dahulu."
+            if ref_res.status_code == 409 or ref_res.status_code == 404:
+                return False, "Repositori kosong atau tidak ada cabang main/master."
             return False, f"GitHub API (get ref): {ref_res.status_code} {ref_res.text[:200]}"
             
         commit_sha = ref_res.json()["object"]["sha"]
         
-        # 2. Get commit
         commit_url = f"https://api.github.com/repos/{owner_repo}/git/commits/{commit_sha}"
         commit_res = await client.get(commit_url)
         if commit_res.status_code != 200:
@@ -1013,19 +1067,13 @@ async def _github_push() -> tuple[bool, str]:
             
         base_tree_sha = commit_res.json()["tree"]["sha"]
         
-        # 3. Create tree
-        tree = []
-        for path in store.root.rglob("*.json"):
-            if ".git" not in path.parts:
-                rel_path = str(path.relative_to(store.root)).replace("\\", "/")
-                content = json.dumps(store.read_json(path), ensure_ascii=False)
-                tree.append({
-                    "path": rel_path,
-                    "mode": "100644",
-                    "type": "blob",
-                    "content": content
-                })
-                
+        tree = [{
+            "path": "supabase_backup.json",
+            "mode": "100644",
+            "type": "blob",
+            "content": content
+        }]
+        
         tree_url = f"https://api.github.com/repos/{owner_repo}/git/trees"
         tree_res = await client.post(tree_url, json={"base_tree": base_tree_sha, "tree": tree})
         if tree_res.status_code != 201:
@@ -1033,10 +1081,9 @@ async def _github_push() -> tuple[bool, str]:
             
         new_tree_sha = tree_res.json()["sha"]
         
-        # 4. Create commit
         new_commit_url = f"https://api.github.com/repos/{owner_repo}/git/commits"
         new_commit_res = await client.post(new_commit_url, json={
-            "message": f"GhostWriter Push {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
+            "message": f"Supabase Backup {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
             "tree": new_tree_sha,
             "parents": [commit_sha]
         })
@@ -1045,24 +1092,22 @@ async def _github_push() -> tuple[bool, str]:
             
         new_commit_sha = new_commit_res.json()["sha"]
         
-        # 5. Update ref
         patch_url = f"https://api.github.com/repos/{owner_repo}/git/refs/heads/{branch}"
         update_ref_res = await client.patch(patch_url, json={"sha": new_commit_sha, "force": True})
         if update_ref_res.status_code != 200:
             return False, f"GitHub API (update ref): {update_ref_res.status_code} {update_ref_res.text[:200]}"
 
-    queue_path = store.root / "queue" / "pending_sync.json"
-    if queue_path.exists():
-        store.write_json(queue_path, {"schema_version": 1, "items": []})
-    system_path = store.root / "system" / "settings.json"
-    if system_path.exists():
-        system = store.read_json(system_path)
+    try:
+        system = store.read_json(store.root / "system" / "settings.json", {})
         system.update({"sync_status": "ok", "last_sync": now_iso()})
-        store.write_json(system_path, system)
+        store.write_json(store.root / "system" / "settings.json", system)
+    except Exception:
+        pass
+        
     return True, ""
 
 
-async def _github_pull() -> tuple[bool, str]:
+async def _github_pull_supabase() -> tuple[bool, str]:
     if not settings.github_token or not settings.github_repo:
         return False, "GITHUB_TOKEN or GITHUB_BACKUP_REPO is not configured"
     owner_repo = settings.github_repo.removeprefix("https://github.com/").removesuffix(".git").strip("/")
@@ -1076,7 +1121,6 @@ async def _github_pull() -> tuple[bool, str]:
     }
     
     async with httpx.AsyncClient(timeout=120, headers=headers) as client:
-        # Get branch ref
         branch = "main"
         ref_url = f"https://api.github.com/repos/{owner_repo}/git/ref/heads/{branch}"
         ref_res = await client.get(ref_url)
@@ -1090,7 +1134,6 @@ async def _github_pull() -> tuple[bool, str]:
             
         commit_sha = ref_res.json()["object"]["sha"]
         
-        # Get tree recursive
         tree_url = f"https://api.github.com/repos/{owner_repo}/git/trees/{commit_sha}?recursive=1"
         tree_res = await client.get(tree_url)
         if tree_res.status_code != 200:
@@ -1098,93 +1141,58 @@ async def _github_pull() -> tuple[bool, str]:
             
         tree = tree_res.json().get("tree", [])
         
-        for item in tree:
-            if item["type"] == "blob" and item["path"].endswith(".json"):
-                blob_url = item["url"]
-                blob_res = await client.get(blob_url)
-                if blob_res.status_code == 200:
-                    blob_data = blob_res.json()
-                    content = base64.b64decode(blob_data["content"]).decode('utf-8')
-                    local_path = store.root / Path(item["path"])
-                    local_path.parent.mkdir(parents=True, exist_ok=True)
-                    try:
-                        parsed_content = json.loads(content)
-                        store.write_json(local_path, parsed_content)
-                    except json.JSONDecodeError:
-                        pass
-
-    system_path = store.root / "system" / "settings.json"
-    if system_path.exists():
-        system = store.read_json(system_path)
+        backup_item = next((item for item in tree if item["path"] == "supabase_backup.json"), None)
+        if not backup_item:
+            return False, "Backup file 'supabase_backup.json' not found on GitHub repository"
+            
+        blob_url = backup_item["url"]
+        blob_res = await client.get(blob_url)
+        if blob_res.status_code != 200:
+            return False, f"GitHub API (get blob): {blob_res.status_code} {blob_res.text[:200]}"
+            
+        blob_data = blob_res.json()
+        import base64
+        content_str = base64.b64decode(blob_data["content"]).decode('utf-8')
+        
+        try:
+            backup_data = json.loads(content_str)
+            for item in backup_data.get("workspaces", []):
+                store.client.table("workspaces").upsert({"id": item["id"], "data": item.get("data")}).execute()
+            for item in backup_data.get("chats", []):
+                store.client.table("chats").upsert({"id": item["id"], "history": item.get("history")}).execute()
+            for item in backup_data.get("drafts", []):
+                store.client.table("drafts").upsert({"id": item["id"], "content": item.get("content")}).execute()
+        except Exception as e:
+            return False, f"Failed to restore data to Supabase: {e}"
+            
+    try:
+        system = store.read_json(store.root / "system" / "settings.json", {})
         system.update({"sync_status": "ok", "last_sync": now_iso()})
-        store.write_json(system_path, system)
+        store.write_json(store.root / "system" / "settings.json", system)
+    except Exception:
+        pass
+        
     return True, ""
 
 
-class BulkProposalRequest(BaseModel):
-    workspace_id: str | None = None
-    action: str
-    proposal_ids: list[str]
+@app.post("/api/sync/backup-to-github", dependencies=[Depends(require_auth)])
+async def backup_to_github() -> dict[str, Any]:
+    ok, message = await _github_push_supabase()
+    if not ok:
+        raise error(message, 500)
+    return {"status": "success", "message": "Backup to GitHub successful"}
 
-@app.post("/api/brain/proposals/bulk", dependencies=[Depends(require_auth)])
-def bulk_action_proposals(req: BulkProposalRequest) -> dict[str, str]:
-    workspace = workspace_id(req.workspace_id)
-    path = store.workspace_path(workspace) / "brain" / "learning_proposals.json"
-    data = store.read_json(path)
-    
-    brain = store.workspace_path(workspace) / "brain"
-    targets = {
-        "style": (brain / "style_profile.json", "rules"),
-        "thinking": (brain / "thinking_profile.json", "patterns"),
-        "memory": (brain / "memory.json", "items"),
-        "rule": (brain / "rules.json", "items"),
-    }
-    
-    updated_count = 0
-    for prop in data.get("items", []):
-        if prop["id"] in req.proposal_ids and prop.get("status", "pending") == "pending":
-            if req.action == "reject":
-                prop.update({"status": "rejected", "updated_at": now_iso()})
-                updated_count += 1
-            elif req.action == "approve":
-                prop.update({"status": "approved", "updated_at": now_iso()})
-                updated_count += 1
-                ptype = prop.get("type", "style")
-                if ptype in targets:
-                    target_path, key = targets[ptype]
-                    target_data = store.read_json(target_path)
-                    content = prop["content"]
-                    if ptype in {"memory", "rule"}:
-                        existing = {
-                            (item.get("content", "") if isinstance(item, dict) else str(item)).casefold()
-                            for item in target_data.get(key, [])
-                        }
-                        if content.casefold() not in existing:
-                            target_data.setdefault(key, []).append({
-                                "id": new_id(ptype),
-                                "content": content,
-                                "source_chat_id": prop.get("source_chat_id"),
-                                "created_at": now_iso(),
-                            })
-                            store.write_json(target_path, target_data)
-                    else:
-                        existing = {r.casefold() for r in target_data.get(key, [])}
-                        if content.casefold() not in existing:
-                            target_data.setdefault(key, []).append(content)
-                            store.write_json(target_path, target_data)
-    store.write_json(path, data)
-    return {"status": "success", "updated": str(updated_count)}
 
 @app.post("/api/sync/push", dependencies=[Depends(require_auth)])
 async def run_sync_push() -> dict[str, Any]:
-    ok, message = await _github_push()
+    ok, message = await _github_push_supabase()
     if not ok:
         raise error(message, 503)
     return {"status": "success", "last_sync": now_iso()}
 
 @app.post("/api/sync/pull", dependencies=[Depends(require_auth)])
 async def run_sync_pull() -> dict[str, Any]:
-    ok, message = await _github_pull()
+    ok, message = await _github_pull_supabase()
     if not ok:
         raise error(message, 503)
     return {"status": "success", "last_sync": now_iso()}
@@ -1192,24 +1200,39 @@ async def run_sync_pull() -> dict[str, Any]:
 
 @app.get("/api/sync/status", dependencies=[Depends(require_auth)])
 def sync_status() -> dict[str, Any]:
-    system = store.read_json(store.root / "system" / "settings.json")
-    queue = store.read_json(store.root / "queue" / "pending_sync.json")
+    try:
+        if not settings.supabase_url or not settings.supabase_key or store.client.__class__.__name__ == "MockSupabaseClient":
+            supabase_connected = False
+        else:
+            store.client.table("workspaces").select("id").limit(1).execute()
+            supabase_connected = True
+    except Exception:
+        supabase_connected = False
+
     return {
-        "status": system.get("sync_status", "idle"),
-        "queue_size": len(queue.get("items", [])),
-        "last_sync": system.get("last_sync", ""),
-        "configured": bool(settings.github_token and settings.github_repo),
+        "supabase_configured": bool(settings.supabase_url and settings.supabase_key),
+        "supabase_connected": supabase_connected,
     }
 
 
 @app.get("/api/sync/queue", dependencies=[Depends(require_auth)])
 def sync_queue() -> dict[str, Any]:
-    return store.read_json(store.root / "queue" / "pending_sync.json")
+    return store.read_json(store.root / "queue" / "pending_sync.json", {})
 
 
 @app.post("/api/sync/retry", dependencies=[Depends(require_auth)])
 async def retry_sync() -> dict[str, Any]:
-    return await run_sync_push()
+    ok, message = await _github_push_supabase()
+    if not ok:
+        raise error(message, 503)
+    return {"status": "success", "last_sync": now_iso()}
+
+
+@app.post("/api/ai/test-connection", dependencies=[Depends(require_auth)])
+async def test_ai_connection(request: Request) -> dict[str, Any]:
+    api_key, model, provider = get_or_auth(request)
+    connected, message = await ai_service.test_connection(api_key, model, provider)
+    return {"connected": connected, "message": message}
 
 
 @app.post("/api/snapshot/create", dependencies=[Depends(require_auth)])

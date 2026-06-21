@@ -251,36 +251,37 @@
       </section>
 
       <section id="view-menu" class="view" aria-label="Settings">
-        <div class="section-heading"><div><span class="eyebrow">System</span><h1>Settings</h1></div></div>
-        <div class="settings-list">
-          <div class="setting-row" style="flex-direction: column; align-items: stretch; gap: 16px; cursor: default;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span><strong>AI Provider</strong><small>Select provider and load models</small></span>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <div style="display: flex; gap: 8px; align-items: center;">
-                <select id="ai-provider-select" style="flex: 0 0 auto; min-width: 130px;">
-                  <option value="openrouter">OpenRouter</option>
-                  <option value="google">Google Gemini</option>
-                  <option value="groq">Groq</option>
-                  <option value="deepseek">DeepSeek</option>
-                  <option value="mistral">Mistral</option>
-                  <option value="kilo">Kilo</option>
-                </select>
-                <input id="ai-api-key" type="password" placeholder="API Key" autocomplete="off" style="flex: 1; min-width: 0;">
-                <button id="load-models-btn" class="button primary compact" type="button">Load</button>
+        <div class="section-heading"><div><span class="eyebrow">System</span><h1>Settings</h1></div></div>        <div class="settings-list">
+          <details class="accordion-clean">
+            <summary>🤖 AI Provider & Model Settings</summary>
+            <div class="setting-row" style="flex-direction: column; align-items: stretch; gap: 16px; cursor: default; margin-top: 12px; border-bottom: none; padding: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span><strong>AI Provider</strong><small>Select provider and load models</small></span>
               </div>
-              <div id="models-browser" class="hidden" style="margin-top: 4px;">
-                <div style="margin-bottom: 12px; font-size: 13px;">
-                  Active Model: <strong id="active-model-display">None</strong>
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <select id="ai-provider-select" style="flex: 0 0 auto; min-width: 130px;">
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="google">Google Gemini</option>
+                    <option value="groq">Groq</option>
+                    <option value="deepseek">DeepSeek</option>
+                    <option value="mistral">Mistral</option>
+                    <option value="kilo">Kilo</option>
+                  </select>
+                  <input id="ai-api-key" type="password" placeholder="API Key" autocomplete="off" style="flex: 1; min-width: 0;">
+                  <button id="load-models-btn" class="button primary compact" type="button">Load</button>
                 </div>
-                <input type="text" id="model-search" placeholder="Search models..." style="width: 100%; margin-bottom: 12px;">
-                <div id="models-list" style="display: grid; gap: 8px; max-height: 240px; overflow-y: auto;"></div>
+                <div id="models-browser" class="hidden" style="margin-top: 4px;">
+                  <div style="margin-bottom: 12px; font-size: 13px;">
+                    Active Model: <strong id="active-model-display">None</strong>
+                  </div>
+                  <input type="text" id="model-search" placeholder="Search models..." style="width: 100%; margin-bottom: 12px;">
+                  <div id="models-list" style="display: grid; gap: 8px; max-height: 240px; overflow-y: auto;"></div>
+                </div>
               </div>
             </div>
-          </div>
-          <button id="manual-sync" class="setting-row" type="button"><span><strong>GitHub Sync</strong><small id="sync-detail">Not configured</small></span><span class="setting-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></span></button>
-          <button id="manage-data-button" class="setting-row" type="button"><span><strong>Manage Data</strong><small>Import or export your offline data</small></span><span class="setting-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M3 12h18"/><path d="m8 8 4-4 4 4"/><path d="m16 16-4 4-4-4"/></svg></span></button>
+          </details>
+          <button id="manage-data-button" class="setting-row" type="button"><span><strong>Manage Data</strong><small>Backup/restore online (GitHub) or offline (ZIP)</small></span><span class="setting-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M3 12h18"/><path d="m8 8 4-4 4 4"/><path d="m16 16-4 4-4-4"/></svg></span></button>
           <input type="file" id="import-file" accept=".zip" class="hidden">
           <button id="install-button" class="setting-row hidden" type="button"><span><strong>Install App</strong><small>Add GhostWriter to home screen</small></span><span class="setting-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg></span></button>
         </div>
@@ -315,33 +316,39 @@
       </div>
     </div>
   </div>
-  <div id="sync-modal" class="backdrop modal-overlay hidden">
-    <div class="dialog-card">
-      <h3 style="margin: 0 0 16px 0; font-size: 1.25rem;">GitHub Sync</h3>
-      <p style="margin-bottom: 24px; color: var(--text-muted); font-size: 0.875rem;">Choose sync method. "Push" overwrites GitHub with your local data. "Pull" overwrites local data with GitHub data.</p>
-      <div style="display:flex; flex-direction:column; gap:12px; margin-bottom: 24px;">
-         <button id="sync-push-btn" class="button primary" type="button" style="width:100%; justify-content:center;">Push to GitHub</button>
-         <button id="sync-pull-btn" class="button primary" type="button" style="width:100%; justify-content:center;">Pull from GitHub</button>
-      </div>
-      <div class="dialog-actions" style="justify-content:center;">
-        <button id="sync-cancel" class="button compact" type="button">Cancel</button>
-      </div>
-    </div>
-  </div>
   <div id="data-modal" class="backdrop modal-overlay hidden">
-    <div class="dialog-card">
-      <h3 style="margin: 0 0 16px 0; font-size: 1.25rem;">Manage Data</h3>
-      <p style="margin-bottom: 24px; color: var(--text-muted); font-size: 0.875rem;">Import data from your device to restore backup (this overwrites existing data), or export data as a ZIP.</p>
-      <div style="display:flex; flex-direction:column; gap:12px; margin-bottom: 24px;">
-         <button id="modal-import-btn" class="button primary" type="button" style="width:100%; justify-content:center;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg> Import Data
-         </button>
-         <a href="/api/export" id="modal-export-btn" class="button primary" style="width:100%; justify-content:center; text-decoration: none;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 4h14"/></svg> Export Data
-         </a>
+    <div class="dialog-card" style="max-width: 400px; width: 90%; padding: 24px;">
+      <h3 style="margin: 0 0 8px 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">Manage Data</h3>
+      <p style="margin-bottom: 20px; color: var(--text-muted); font-size: 0.875rem; line-height: 1.5;">Backup or restore your workspace data either online using GitHub or offline via local files.</p>
+      
+      <!-- Online Section -->
+      <div style="margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+        <h4 style="margin: 0 0 12px 0; font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Online Backup (GitHub)</h4>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+           <button id="sync-push-btn" class="button primary" type="button" style="width:100%; justify-content:center;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Push to GitHub
+           </button>
+           <button id="sync-pull-btn" class="button primary" type="button" style="width:100%; justify-content:center;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Pull from GitHub
+           </button>
+        </div>
       </div>
-      <div class="dialog-actions" style="justify-content:center;">
-        <button id="data-cancel" class="button compact" type="button">Cancel</button>
+      
+      <!-- Offline Section -->
+      <div style="margin-bottom: 24px;">
+        <h4 style="margin: 0 0 12px 0; font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Offline Backup</h4>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+           <button id="modal-import-btn" class="button primary" type="button" style="width:100%; justify-content:center;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg> Import ZIP File
+           </button>
+           <a href="/api/export" id="modal-export-btn" class="button primary" style="width:100%; justify-content:center; text-decoration: none; display: flex; align-items: center; box-sizing: border-box;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 4h14"/></svg> Export ZIP File
+           </a>
+        </div>
+      </div>
+      
+      <div class="dialog-actions" style="justify-content:center; margin-top: 16px;">
+        <button id="data-cancel" class="button compact" type="button" style="min-width: 100px;">Close</button>
       </div>
     </div>
   </div>

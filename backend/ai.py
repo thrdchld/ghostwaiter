@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from .storage import store
+from .config import settings
 
 # Provider endpoint configurations
 PROVIDER_ENDPOINTS = {
@@ -28,7 +29,9 @@ class AIService:
         pass
 
     def _endpoint(self, provider: str) -> str:
-        return PROVIDER_ENDPOINTS.get(provider, PROVIDER_ENDPOINTS["openrouter"])
+        if not provider or provider == "default":
+            return settings.ai_base_url
+        return PROVIDER_ENDPOINTS.get(provider, settings.ai_base_url)
 
     def _headers(self, provider: str, api_key: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -41,26 +44,30 @@ class AIService:
         max_tokens: int = 900,
         provider: str = "openrouter",
     ) -> AsyncIterator[str]:
+        # Fallback to default 9Router if credentials are not provided
         if not api_key:
-            raise AIUnavailable("API Key is missing. Please configure it in Settings.")
+            provider = "default"
+            api_key = settings.supabase_key or "dummy"
         if not model:
-            raise AIUnavailable("No model selected. Please select a model in Settings.")
+            model = "default"
 
         endpoint = self._endpoint(provider)
         headers = self._headers(provider, api_key)
 
         async with httpx.AsyncClient() as client:
             try:
+                # Use standard OpenAI payload format
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "stream": True,
+                }
                 async with client.stream(
                     "POST",
                     endpoint,
                     headers=headers,
-                    json={
-                        "model": model,
-                        "messages": messages,
-                        "temperature": 0.7,
-                        "stream": True,
-                    },
+                    json=payload,
                     timeout=120.0,
                 ) as response:
                     response.raise_for_status()
@@ -92,22 +99,29 @@ class AIService:
         temperature: float = 0.3,
         provider: str = "openrouter",
     ) -> str:
-        if not api_key or not model:
-            raise AIUnavailable("API Key and Model are required.")
+        # Fallback to default 9Router if credentials are not provided
+        if not api_key:
+            provider = "default"
+            api_key = settings.supabase_key or "dummy"
+        if not model:
+            model = "default"
 
         endpoint = self._endpoint(provider)
         headers = self._headers(provider, api_key)
 
         async with httpx.AsyncClient() as client:
             try:
+                # Use standard OpenAI payload format
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "stream": False,
+                }
                 response = await client.post(
                     endpoint,
                     headers=headers,
-                    json={
-                        "model": model,
-                        "messages": messages,
-                        "temperature": temperature,
-                    },
+                    json=payload,
                     timeout=120.0,
                 )
                 response.raise_for_status()
@@ -120,10 +134,10 @@ class AIService:
 
     def context(self, workspace_id: str) -> str:
         brain = store.workspace_path(workspace_id) / "brain"
-        style = store.read_json(brain / "style_profile.json").get("rules", [])
-        thinking = store.read_json(brain / "thinking_profile.json").get("patterns", [])
-        rules = store.read_json(brain / "rules.json").get("items", [])
-        memory = store.read_json(brain / "memory.json").get("items", [])
+        style = store.read_json(brain / "style_profile.json", {"rules": []}).get("rules", [])
+        thinking = store.read_json(brain / "thinking_profile.json", {"patterns": []}).get("patterns", [])
+        rules = store.read_json(brain / "rules.json", {"items": []}).get("items", [])
+        memory = store.read_json(brain / "memory.json", {"items": []}).get("items", [])
         sections = []
 
         def content(item: Any) -> str:
@@ -214,6 +228,48 @@ class AIService:
             "concepts": [str(item).strip() for item in parsed.get("concepts", []) if str(item).strip()][:8],
             "proposals": proposals,
         }
+
+    async def test_connection(self, api_key: str, model: str, provider: str) -> tuple[bool, str]:
+        # Fallback to default 9Router if credentials are not provided
+        if not api_key:
+            if provider == "default" or not provider:
+                api_key = settings.supabase_key or "dummy"
+            else:
+                return False, f"API key for {provider} is not configured"
+
+        if provider == "default" or not provider:
+            url = f"{settings.ai_base_url}/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider == "google":
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+            headers = {}
+        elif provider == "openrouter":
+            url = "https://openrouter.ai/api/v1/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider == "groq":
+            url = "https://api.groq.com/openai/v1/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider == "deepseek":
+            url = "https://api.deepseek.com/v1/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider == "mistral":
+            url = "https://api.mistral.ai/v1/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider == "kilo":
+            url = "https://api.kilo.ai/v1/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        else:
+            return False, f"Unknown provider: {provider}"
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.get(url, headers=headers)
+                if res.status_code == 200:
+                    return True, "Connected successfully"
+                else:
+                    return False, f"HTTP {res.status_code}"
+        except Exception as e:
+            return False, f"Connection error: {e}"
 
 
 ai_service = AIService()

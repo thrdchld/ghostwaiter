@@ -504,9 +504,8 @@ class SyncApiTests(unittest.TestCase):
         r = client.get("/api/sync/status")
         self.assertEqual(r.status_code, 200)
         data = r.json()
-        self.assertIn("status", data)
-        self.assertIn("queue_size", data)
-        self.assertIn("configured", data)
+        self.assertIn("supabase_configured", data)
+        self.assertIn("supabase_connected", data)
 
     def test_sync_queue(self):
         r = client.get("/api/sync/queue")

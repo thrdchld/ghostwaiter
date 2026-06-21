@@ -1299,73 +1299,38 @@ async function loadReferences() {
   } catch (_) {}
 }
 
-
-
 async function loadSyncStatus() {
   try {
     const data = await jsonApi("/api/sync/status");
     const pill = $("#sync-status");
-    pill.className = `status-pill ${data.queue_size ? "warn" : "ok"}`;
-    pill.querySelector("span").textContent = data.queue_size ? `${data.queue_size} pending` : "Synced";
-    $("#sync-detail").textContent = data.configured ? `${data.queue_size} pending changes` : "Rahasia GitHub belum dikonfigurasi";
+    if (!pill) return;
+    const span = pill.querySelector("span");
+    const icon = pill.querySelector("i");
+    
+    if (!data.supabase_configured) {
+      pill.className = "status-pill error";
+      if (span) span.textContent = "Unconfigured";
+      if (icon) { icon.style.background = ""; icon.style.boxShadow = ""; }
+      pill.title = "Supabase is not configured — check your environment settings";
+    } else if (!data.supabase_connected) {
+      pill.className = "status-pill warn";
+      if (span) span.textContent = "Offline";
+      if (icon) {
+        icon.style.background = "#f97316";
+        icon.style.boxShadow = "0 0 6px #f9731688";
+      }
+      pill.title = "Offline — failed to connect to Supabase database";
+    } else {
+      pill.className = "status-pill ok";
+      if (span) span.textContent = "Synced";
+      if (icon) {
+        icon.style.background = "#22c55e";
+        icon.style.boxShadow = "0 0 6px #22c55e88";
+      }
+      pill.title = "Connected to Supabase & Synced";
+    }
   } catch (_) {}
 }
-
-
-
-async function manualSync() {
-  $("#sync-modal").classList.remove("hidden");
-  
-  $("#sync-cancel").onclick = () => $("#sync-modal").classList.add("hidden");
-  
-  $("#sync-push-btn").onclick = async () => {
-    $("#sync-modal").classList.add("hidden");
-    if (!(await showConfirm("Data in GitHub will be fully overwritten by your local data. Continue Push?"))) return;
-    const overlay = $("#loading-overlay");
-    const loadingText = $("#loading-text");
-    try {
-      $("#manual-sync").disabled = true;
-      loadingText.textContent = "Pushing to GitHub...";
-      overlay.classList.remove("hidden");
-      await jsonApi("/api/sync/push", {method: "POST"});
-      overlay.classList.add("hidden");
-      await loadSyncStatus();
-      // Toast fires AFTER overlay is gone
-      setTimeout(() => toast("Push sync completed", "success"), 50);
-    } catch (error) {
-      overlay.classList.add("hidden");
-      setTimeout(() => toast(error.message, "error"), 50);
-    } finally {
-      $("#manual-sync").disabled = false;
-    }
-  };
-
-  $("#sync-pull-btn").onclick = async () => {
-    $("#sync-modal").classList.add("hidden");
-    if (!(await showConfirm("Your local data will be overwritten by GitHub data. This cannot be undone. Continue Pull?"))) return;
-    const overlay = $("#loading-overlay");
-    const loadingText = $("#loading-text");
-    try {
-      $("#manual-sync").disabled = true;
-      loadingText.textContent = "Pulling from GitHub...";
-      overlay.classList.remove("hidden");
-      await jsonApi("/api/sync/pull", {method: "POST"});
-      overlay.classList.add("hidden");
-      // Toast fires AFTER overlay is gone, then reload
-      setTimeout(() => {
-        toast("Pull sync completed. Reloading...", "success");
-        setTimeout(() => location.reload(), 1500);
-      }, 50);
-    } catch (error) {
-      overlay.classList.add("hidden");
-      setTimeout(() => toast(error.message, "error"), 50);
-    } finally {
-      $("#manual-sync").disabled = false;
-    }
-  };
-}
-
-
 
 function bindEvents() {
   if ($("#model-status")) $("#model-status").onclick = () => { const provider = localStorage.getItem("ghostwriter:ai_provider") || "openrouter"; const m = localStorage.getItem("ghostwriter:openrouter_model"); const k = localStorage.getItem(`ghostwriter:key_${provider}`) || localStorage.getItem("ghostwriter:openrouter_key"); toast(m && k ? `${provider.toUpperCase()} · ${m}` : "AI not configured — open Settings → AI Provider", m && k ? "success" : "error"); };
@@ -1757,8 +1722,60 @@ function bindEvents() {
   $("#learn-raw-button").onclick = learnRawWriting;
   $("#reference-button").onclick = searchReferences;
 
-  $("#sync-status").onclick = manualSync;
-  $("#manual-sync").onclick = manualSync;
+  $("#sync-status").onclick = async () => {
+    toast("Checking connection to Supabase...", "info");
+    await loadSyncStatus();
+    try {
+      const data = await jsonApi("/api/sync/status");
+      if (data.supabase_connected) {
+        toast("Connected to Supabase. All changes are synchronized in real-time.", "success");
+      } else if (data.supabase_configured) {
+        toast("Failed to connect to Supabase. You are currently offline.", "error");
+      } else {
+        toast("Supabase is not configured. Please check your settings/environment files.", "error");
+      }
+    } catch (err) {
+      toast("Error checking Supabase connection: " + err.message, "error");
+    }
+  };
+
+  $("#sync-push-btn").onclick = async () => {
+    $("#data-modal").classList.add("hidden");
+    if (!(await showConfirm("Data in GitHub will be fully overwritten by your local data. Continue Push?"))) return;
+    const overlay = $("#loading-overlay");
+    const loadingText = $("#loading-text");
+    try {
+      loadingText.textContent = "Pushing to GitHub...";
+      overlay.classList.remove("hidden");
+      await jsonApi("/api/sync/push", {method: "POST"});
+      overlay.classList.add("hidden");
+      await loadSyncStatus();
+      setTimeout(() => toast("Push sync completed", "success"), 50);
+    } catch (error) {
+      overlay.classList.add("hidden");
+      setTimeout(() => toast(error.message, "error"), 50);
+    }
+  };
+
+  $("#sync-pull-btn").onclick = async () => {
+    $("#data-modal").classList.add("hidden");
+    if (!(await showConfirm("Your local data will be overwritten by GitHub data. This cannot be undone. Continue Pull?"))) return;
+    const overlay = $("#loading-overlay");
+    const loadingText = $("#loading-text");
+    try {
+      loadingText.textContent = "Pulling from GitHub...";
+      overlay.classList.remove("hidden");
+      await jsonApi("/api/sync/pull", {method: "POST"});
+      overlay.classList.add("hidden");
+      setTimeout(() => {
+        toast("Pull sync completed. Reloading...", "success");
+        setTimeout(() => location.reload(), 1500);
+      }, 50);
+    } catch (error) {
+      overlay.classList.add("hidden");
+      setTimeout(() => toast(error.message, "error"), 50);
+    }
+  };
 
   $("#logout-button").onclick = async () => {
     await jsonApi("/api/auth/logout", {method: "POST"});
