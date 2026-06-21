@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file. This projec
 
 ---
 
+## [v1.2.0] - 2026-06-21
+
+This release delivers major UX and stability improvements, centering around data backup orchestration, custom dialog controls, safety prompts for unsaved changes, and aesthetic enhancements in the brain panel.
+
+### Added
+- **AI Settings Modal & Custom Dropdowns**:
+  - Migrated the AI Provider and Model selector from a settings accordion to a dedicated modal dialog (`#ai-modal`).
+  - Added a custom-styled dropdown wrapper matching the write/rewrite options to replace system native options.
+- **Topmost Confirmation Modal**:
+  - Replaced browser-native `confirm()` dialogues with the app's integrated custom warning confirmation modal.
+  - Positioned the confirmation modal at `z-index: 1050` to overlay other modals and adjusted its width/padding to fit short confirmation text neatly.
+
+### Changed
+- **Dialog Backdrop Dismissals**:
+  - Implemented safe click-outside-to-close behavior across all dialog overlays (`#data-modal`, `#ai-modal`, `#prompt-modal`, `#confirm-modal`).
+  - Implemented capturing-phase event listener on the sidebar. Clicking on the sidebar or any button inside it now intercepts actions, validates unsaved edits/active processes, and dismisses active popups/sheets.
+- **Prompt Edits check**:
+  - Added validation checks on prompt cancellations (button click, backdrop click, or sidebar clicks). If the input text has unsaved changes, users are prompted via the confirmation modal.
+- **Colorized Brain Actions**:
+  - Highlighted Edit (blue accent) and Delete (red danger) buttons in the Brain lists and memories cards for better visual distinction from rule content.
+- **Translation improvements**:
+  - Updated offline backup indicators and status texts to read `"Restored from device"`.
+
+---
+
 ## [v1.1.0] - 2026-06-18
 
 This release focuses on a complete visual redesign, user experience (UX) enhancements to match premium AI platforms (ChatGPT, Gemini, Claude), a robust test suite, and clean attachment workflows.

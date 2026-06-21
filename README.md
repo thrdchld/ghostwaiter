@@ -15,13 +15,13 @@ tags:
   - inference-providers
 ---
 
-# GhostWriter v1.0
+# GhostWriter v1.2
 
 GhostWriter adalah web app penulisan personal yang menggabungkan chat, editor tulisan, sistem pembelajaran gaya, dan sinkronisasi GitHub. Aplikasi ini berjalan sebagai satu halaman PWA dengan backend FastAPI yang menyimpan data secara lokal dan dapat dipadukan dengan Hugging Face Space.
 
 > ⚠️ Pengingat sinkronisasi: repo GitHub ini terhubung ke Hugging Face Space dan sebaliknya. Perubahan yang dibuat di GitHub harus dipush ke repo yang sama, lalu Space perlu di-rebuild atau di-pull sesuai alur deployment; perubahan yang dibuat di Space juga perlu disinkronkan kembali ke GitHub agar data tetap konsisten.
 
-## Ringkasan versi 1.0
+## Ringkasan versi 1.2
 
 - UI utama: Chat, Write, Brain, dan Settings.
 - Provider AI dan model dipilih langsung dari UI sesuai kebutuhan perangkat pengguna.
