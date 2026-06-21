@@ -318,7 +318,10 @@ def switch_workspace(req: WorkspaceRequest) -> dict[str, str]:
 @app.get("/api/workspace/current", dependencies=[Depends(require_auth)])
 def current_workspace() -> dict[str, Any]:
     active = store.active_workspace()
-    return next(item for item in store.list_workspaces() if item["id"] == active)
+    try:
+        return next(item for item in store.list_workspaces() if item["id"] == active)
+    except StopIteration:
+        return {"id": active, "name": active.capitalize(), "created_at": now_iso(), "updated_at": now_iso()}
 
 
 @app.post("/api/chat/new", dependencies=[Depends(require_auth)])

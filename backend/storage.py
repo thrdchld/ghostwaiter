@@ -538,9 +538,21 @@ class SupabaseStore:
                 d = row.get("data") or {}
                 d["id"] = row["id"]
                 items.append(d)
+            if not items:
+                items = [{
+                    "id": "writing",
+                    "name": "Writing",
+                    "created_at": now_iso(),
+                    "updated_at": now_iso()
+                }]
             return items
         except Exception:
-            return []
+            return [{
+                "id": "writing",
+                "name": "Writing",
+                "created_at": now_iso(),
+                "updated_at": now_iso()
+            }]
 
     def create_workspace(self, name: str) -> dict[str, Any]:
         clean_name = " ".join(name.split()).strip()

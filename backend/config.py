@@ -44,5 +44,11 @@ class Settings(BaseSettings):
         # Handle fallback for session_secret
         if not self.session_secret:
             object.__setattr__(self, "session_secret", self.app_password or "dev-secret-change-me")
+            
+        # Strip quotes and spaces from env values to prevent DNS/validation errors
+        for field in ("supabase_url", "supabase_key", "github_token", "github_repo", "ai_base_url"):
+            val = getattr(self, field, "")
+            if isinstance(val, str) and val:
+                object.__setattr__(self, field, val.strip().strip("'\""))
 
 settings = Settings()
