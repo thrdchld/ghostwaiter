@@ -261,7 +261,9 @@ async def http_exception_handler(_request: Any, exc: HTTPException) -> JSONRespo
     return JSONResponse(payload, status_code=exc.status_code)
 
 
+@app.head("/api/health")
 @app.get("/api/health")
+@app.head("/health")
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "timestamp": now_iso(), "storage": str(store.root)}
@@ -1343,6 +1345,7 @@ def service_worker() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "service-worker.js", media_type="application/javascript")
 
 
+@app.head("/", include_in_schema=False)
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "index.html")
