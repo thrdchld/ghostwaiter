@@ -156,6 +156,12 @@ class SnapshotRestoreRequest(BaseModel):
     snapshot_id: str
 
 
+class AIConfigRequest(BaseModel):
+    provider: str
+    model: str
+    keys: dict[str, str]
+
+
 def error(message: str, status_code: int = 400) -> HTTPException:
     return HTTPException(status_code=status_code, detail={"status": "error", "message": message})
 
@@ -1037,8 +1043,17 @@ async def _github_push_supabase() -> tuple[bool, str]:
         chats_res = store.client.table("chats").select("id, history").execute()
         drafts_res = store.client.table("drafts").select("id, content").execute()
         
+        workspaces_data = []
+        for ws in workspaces_res.data or []:
+            ws_copy = dict(ws)
+            if ws_copy.get("id") == "__system__" and isinstance(ws_copy.get("data"), dict):
+                data_copy = dict(ws_copy["data"])
+                data_copy.pop("ai_config", None)
+                ws_copy["data"] = data_copy
+            workspaces_data.append(ws_copy)
+            
         backup_data = {
-            "workspaces": workspaces_res.data,
+            "workspaces": workspaces_data,
             "chats": chats_res.data,
             "drafts": drafts_res.data,
             "timestamp": now_iso()
@@ -1160,7 +1175,18 @@ async def _github_pull_supabase() -> tuple[bool, str]:
         try:
             backup_data = json.loads(content_str)
             for item in backup_data.get("workspaces", []):
-                store.client.table("workspaces").upsert({"id": item["id"], "data": item.get("data")}).execute()
+                if item["id"] == "__system__":
+                    existing_res = store.client.table("workspaces").select("data").eq("id", "__system__").execute()
+                    existing_ai_config = None
+                    if existing_res.data:
+                        existing_ai_config = existing_res.data[0].get("data", {}).get("ai_config")
+                    
+                    restored_data = item.get("data") or {}
+                    if existing_ai_config:
+                        restored_data["ai_config"] = existing_ai_config
+                    store.client.table("workspaces").upsert({"id": "__system__", "data": restored_data}).execute()
+                else:
+                    store.client.table("workspaces").upsert({"id": item["id"], "data": item.get("data")}).execute()
             for item in backup_data.get("chats", []):
                 store.client.table("chats").upsert({"id": item["id"], "history": item.get("history")}).execute()
             for item in backup_data.get("drafts", []):
@@ -1219,6 +1245,32 @@ def sync_status() -> dict[str, Any]:
     }
 
 
+@app.get("/api/ai/config", dependencies=[Depends(require_auth)])
+def get_ai_config() -> dict[str, Any]:
+    try:
+        res = store.client.table("workspaces").select("data").eq("id", "__system__").execute()
+        if res.data:
+            data = res.data[0].get("data") or {}
+            return data.get("ai_config") or {"provider": "", "model": "", "keys": {}}
+    except Exception as e:
+        print(f"Failed to get AI config: {e}", flush=True)
+    return {"provider": "", "model": "", "keys": {}}
+
+
+@app.post("/api/ai/config", dependencies=[Depends(require_auth)])
+def save_ai_config(req: AIConfigRequest) -> dict[str, str]:
+    try:
+        res = store.client.table("workspaces").select("data").eq("id", "__system__").execute()
+        current_data = {}
+        if res.data:
+            current_data = res.data[0].get("data") or {}
+        current_data["ai_config"] = req.model_dump()
+        store.client.table("workspaces").upsert({"id": "__system__", "data": current_data}).execute()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save AI config: {e}")
+
+
 @app.get("/api/sync/queue", dependencies=[Depends(require_auth)])
 def sync_queue() -> dict[str, Any]:
     return store.read_json(store.root / "queue" / "pending_sync.json", {})
@@ -1271,6 +1323,30 @@ def restore_snapshot(req: SnapshotRestoreRequest) -> dict[str, str]:
             target = (root / member.filename).resolve()
             if root not in target.parents and target != root:
                 raise error("Snapshot contains an unsafe path")
+                
+        try:
+            content_bytes = archive.read("supabase_backup.json")
+            backup_data = json.loads(content_bytes.decode("utf-8"))
+            
+            # Read existing ai_config to preserve it
+            existing_res = store.client.table("workspaces").select("data").eq("id", "__system__").execute()
+            existing_ai_config = None
+            if existing_res.data:
+                existing_ai_config = existing_res.data[0].get("data", {}).get("ai_config")
+                
+            for item in backup_data.get("workspaces", []):
+                restored_data = item.get("data") or {}
+                if item["id"] == "__system__":
+                    if existing_ai_config:
+                        restored_data["ai_config"] = existing_ai_config
+                store.client.table("workspaces").upsert({"id": item["id"], "data": restored_data}).execute()
+            for item in backup_data.get("chats", []):
+                store.client.table("chats").upsert({"id": item["id"], "history": item.get("history")}).execute()
+            for item in backup_data.get("drafts", []):
+                store.client.table("drafts").upsert({"id": item["id"], "content": item.get("content")}).execute()
+        except Exception as e:
+            raise error(f"Failed to restore database from snapshot: {e}", 500)
+            
         archive.extractall(store.root)
     return {"status": "success"}
 

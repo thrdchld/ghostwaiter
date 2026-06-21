@@ -72,7 +72,6 @@ function updateModelIndicator() {
   if (!btn) return;
   const icon = btn.querySelector("i");
   const label = btn.querySelector("span");
-  const PROVIDER_LABELS = { openrouter: "OR", google: "Gemini", groq: "Groq", deepseek: "DS", mistral: "Mistral", kilo: "Kilo" };
   if (key && model) {
     if (icon) { icon.style.background = "#22c55e"; icon.style.boxShadow = "0 0 6px #22c55e88"; }
     const shortModel = model.split("/").pop();
@@ -80,8 +79,61 @@ function updateModelIndicator() {
     btn.title = `${provider}: ${model}`;
   } else {
     if (icon) { icon.style.background = ""; icon.style.boxShadow = ""; }
-    if (label) label.textContent = PROVIDER_LABELS[provider] || "AI";
+    if (label) label.textContent = "AI";
     btn.title = "Click to configure AI in Settings";
+  }
+}
+
+async function syncAIConfigFromSupabase() {
+  try {
+    const config = await jsonApi("/api/ai/config");
+    if (config && config.provider) {
+      localStorage.setItem("ghostwriter:ai_provider", config.provider);
+      localStorage.setItem("ghostwriter:openrouter_model", config.model || "");
+      if (config.keys) {
+        for (const [provider, key] of Object.entries(config.keys)) {
+          if (key) {
+            localStorage.setItem(`ghostwriter:key_${provider}`, key);
+            if (provider === "openrouter") {
+              localStorage.setItem("ghostwriter:openrouter_key", key);
+            }
+          }
+        }
+      }
+      
+      const providerSelect = $("#ai-provider-select");
+      const apiKeyInput = $("#ai-api-key");
+      const orModelDisplay = $("#active-model-display");
+      if (providerSelect) providerSelect.value = config.provider;
+      if (apiKeyInput) apiKeyInput.value = config.keys[config.provider] || "";
+      if (orModelDisplay) orModelDisplay.textContent = config.model || "None";
+      
+      updateModelIndicator();
+    }
+  } catch (err) {
+    console.error("Failed to sync AI config from Supabase:", err);
+  }
+}
+
+async function saveAIConfigToSupabase() {
+  const provider = localStorage.getItem("ghostwriter:ai_provider") || "openrouter";
+  const model = localStorage.getItem("ghostwriter:openrouter_model") || "";
+  const keys = {
+    openrouter: localStorage.getItem("ghostwriter:key_openrouter") || localStorage.getItem("ghostwriter:openrouter_key") || "",
+    google: localStorage.getItem("ghostwriter:key_google") || "",
+    groq: localStorage.getItem("ghostwriter:key_groq") || "",
+    deepseek: localStorage.getItem("ghostwriter:key_deepseek") || "",
+    mistral: localStorage.getItem("ghostwriter:key_mistral") || "",
+    kilo: localStorage.getItem("ghostwriter:key_kilo") || "",
+  };
+  
+  try {
+    await api("/api/ai/config", {
+      method: "POST",
+      body: { provider, model, keys }
+    });
+  } catch (err) {
+    console.error("Failed to save AI config to Supabase:", err);
   }
 }
 
@@ -249,7 +301,7 @@ async function initialize() {
   const lastView = localStorage.getItem("ghostwriter:activeView") || "chat";
   showView(lastView);
   await loadWorkspaces();
-  await Promise.all([loadSyncStatus()]);
+  await Promise.all([loadSyncStatus(), syncAIConfigFromSupabase()]);
   restoreLocalDraft();
   restoreChatDraft();
   updateModelIndicator();
@@ -1500,14 +1552,18 @@ function bindEvents() {
     modelsBrowser?.classList.add("hidden");
     allModels = [];
     updateModelIndicator();
+    saveAIConfigToSupabase();
   });
 
   apiKeyInput?.addEventListener("input", () => {
     const p = providerSelect.value;
     localStorage.setItem(`ghostwriter:key_${p}`, apiKeyInput.value.trim());
-    // legacy compat for openrouter
     if (p === "openrouter") localStorage.setItem("ghostwriter:openrouter_key", apiKeyInput.value.trim());
     updateModelIndicator();
+  });
+
+  apiKeyInput?.addEventListener("change", () => {
+    saveAIConfigToSupabase();
   });
 
   function renderModels() {
@@ -1531,6 +1587,7 @@ function bindEvents() {
         orModelDisplay.textContent = model.id;
         updateModelIndicator();
         toast(`Model selected: ${model.id}`, "success");
+        saveAIConfigToSupabase();
       };
       modelsList.appendChild(el);
     });

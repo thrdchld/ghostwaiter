@@ -237,7 +237,8 @@ class SupabaseStore:
                         ],
                     },
                     "pending_sync": {"schema_version": SCHEMA_VERSION, "items": []},
-                    "snapshots_manifest": {"schema_version": SCHEMA_VERSION, "items": []}
+                    "snapshots_manifest": {"schema_version": SCHEMA_VERSION, "items": []},
+                    "ai_config": {"provider": "", "model": "", "keys": {}}
                 }
                 self.client.table("workspaces").upsert({"id": "__system__", "data": system_data}).execute()
                 
@@ -770,9 +771,18 @@ class SupabaseStore:
         workspaces_res = self.client.table("workspaces").select("id, data").execute()
         chats_res = self.client.table("chats").select("id, history").execute()
         drafts_res = self.client.table("drafts").select("id, content").execute()
-        
+
+        workspaces_data = []
+        for ws in workspaces_res.data or []:
+            ws_copy = dict(ws)
+            if ws_copy.get("id") == "__system__" and isinstance(ws_copy.get("data"), dict):
+                data_copy = dict(ws_copy["data"])
+                data_copy.pop("ai_config", None)
+                ws_copy["data"] = data_copy
+            workspaces_data.append(ws_copy)
+
         backup_data = {
-            "workspaces": workspaces_res.data,
+            "workspaces": workspaces_data,
             "chats": chats_res.data,
             "drafts": drafts_res.data,
             "timestamp": now_iso()
