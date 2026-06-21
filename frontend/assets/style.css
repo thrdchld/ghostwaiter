@@ -425,6 +425,27 @@ button:active { transform: translateY(0); }
 .icon-button { font-size: 18px; }
 .icon-button svg { width: 18px; height: 18px; }
 .text-button.accent { color: var(--accent); }
+.text-button.compact {
+  min-height: 28px;
+  min-width: unset;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.text-button.compact:not(.danger) {
+  color: var(--accent);
+}
+.text-button.compact:not(.danger):hover {
+  background: var(--accent-soft);
+}
+.text-button.danger {
+  color: var(--status-danger) !important;
+}
+.text-button.danger:hover {
+  background: #fef2f2 !important;
+}
+:root[data-theme="dark"] .text-button.danger:hover {
+  background: #450a0a !important;
+}
 .setting-icon {
   display: inline-flex;
   align-items: center;

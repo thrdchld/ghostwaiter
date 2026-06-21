@@ -158,11 +158,19 @@ function showConfirm(message) {
       modal.classList.add("hidden");
       $("#confirm-ok").removeEventListener("click", onOk);
       $("#confirm-cancel").removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdropClick);
     };
     const onOk = () => { cleanup(); resolve(true); };
     const onCancel = () => { cleanup(); resolve(false); };
+    const onBackdropClick = (e) => {
+      if (e.target === modal) {
+        cleanup();
+        resolve(false);
+      }
+    };
     $("#confirm-ok").addEventListener("click", onOk);
     $("#confirm-cancel").addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdropClick);
   });
 }
 
@@ -178,11 +186,26 @@ function showPrompt(message, defaultValue = "") {
       modal.classList.add("hidden");
       $("#prompt-ok").removeEventListener("click", onOk);
       $("#prompt-cancel").removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdropClick);
     };
     const onOk = () => { cleanup(); resolve(input.value); };
     const onCancel = () => { cleanup(); resolve(null); };
+    const onBackdropClick = async (e) => {
+      if (e.target === modal) {
+        if (input.value !== defaultValue) {
+          if (await showConfirm("Discard unsaved changes?")) {
+            cleanup();
+            resolve(null);
+          }
+        } else {
+          cleanup();
+          resolve(null);
+        }
+      }
+    };
     $("#prompt-ok").addEventListener("click", onOk);
     $("#prompt-cancel").addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdropClick);
   });
 }
 
@@ -1808,8 +1831,76 @@ function bindEvents() {
   if ($("#modal-import-btn")) $("#modal-import-btn").onclick = () => { $("#import-file").click(); $("#data-modal").classList.add("hidden"); };
   if ($("#data-cancel")) $("#data-cancel").onclick = () => $("#data-modal").classList.add("hidden");
   
-  if ($("#ai-settings-button")) $("#ai-settings-button").onclick = () => $("#ai-modal").classList.remove("hidden");
-  if ($("#ai-settings-close")) $("#ai-settings-close").onclick = () => $("#ai-modal").classList.add("hidden");
+  let initialProvider = "";
+  let initialKeys = {};
+  let initialModel = "";
+
+  const hasAIChanges = () => {
+    const currentProvider = localStorage.getItem("ghostwriter:ai_provider") || "openrouter";
+    const currentModel = localStorage.getItem("ghostwriter:openrouter_model") || "";
+    if (currentProvider !== initialProvider || currentModel !== initialModel) return true;
+    for (const p of ["openrouter", "google", "groq", "deepseek", "mistral", "kilo"]) {
+      const currentKey = localStorage.getItem(`ghostwriter:key_${p}`) || (p === "openrouter" ? localStorage.getItem("ghostwriter:openrouter_key") : "") || "";
+      const initialKey = initialKeys[p] || "";
+      if (currentKey !== initialKey) return true;
+    }
+    return false;
+  };
+
+  const closeAIModalWithCheck = async () => {
+    if (hasAIChanges()) {
+      if (await showConfirm("Discard unsaved AI settings changes?")) {
+        // Restore initial values
+        localStorage.setItem("ghostwriter:ai_provider", initialProvider);
+        localStorage.setItem("ghostwriter:openrouter_model", initialModel);
+        for (const [p, val] of Object.entries(initialKeys)) {
+          localStorage.setItem(`ghostwriter:key_${p}`, val);
+          if (p === "openrouter") localStorage.setItem("ghostwriter:openrouter_key", val);
+        }
+        
+        // Update input views
+        const providerSelect = $("#ai-provider-select");
+        const apiKeyInput = $("#ai-api-key");
+        const orModelDisplay = $("#active-model-display");
+        if (providerSelect) providerSelect.value = initialProvider;
+        if (apiKeyInput) apiKeyInput.value = initialKeys[initialProvider] || "";
+        if (orModelDisplay) orModelDisplay.textContent = initialModel || "None";
+        
+        const aiProviderDisplay = $("#ai-provider-display");
+        const aiProviderMenu = $("#ai-provider-menu");
+        if (aiProviderDisplay && initialProvider) {
+          const activeOption = aiProviderMenu?.querySelector(`.dropdown-item[data-value="${initialProvider}"]`);
+          if (activeOption) {
+            aiProviderMenu.querySelectorAll(".dropdown-item").forEach(el => el.classList.remove("active"));
+            activeOption.classList.add("active");
+            aiProviderDisplay.textContent = activeOption.textContent;
+          }
+        }
+        
+        updateModelIndicator();
+        saveAIConfigToSupabase();
+        $("#ai-modal").classList.add("hidden");
+      }
+    } else {
+      $("#ai-modal").classList.add("hidden");
+    }
+  };
+
+  if ($("#ai-settings-button")) $("#ai-settings-button").onclick = () => {
+    initialProvider = localStorage.getItem("ghostwriter:ai_provider") || "openrouter";
+    initialModel = localStorage.getItem("ghostwriter:openrouter_model") || "";
+    initialKeys = {
+      openrouter: localStorage.getItem("ghostwriter:key_openrouter") || localStorage.getItem("ghostwriter:openrouter_key") || "",
+      google: localStorage.getItem("ghostwriter:key_google") || "",
+      groq: localStorage.getItem("ghostwriter:key_groq") || "",
+      deepseek: localStorage.getItem("ghostwriter:key_deepseek") || "",
+      mistral: localStorage.getItem("ghostwriter:key_mistral") || "",
+      kilo: localStorage.getItem("ghostwriter:key_kilo") || "",
+    };
+    $("#ai-modal").classList.remove("hidden");
+  };
+
+  if ($("#ai-settings-close")) $("#ai-settings-close").onclick = closeAIModalWithCheck;
 
   // Backdrop click-outside-to-close handlers
   const dataModal = $("#data-modal");
@@ -1824,9 +1915,28 @@ function bindEvents() {
   if (aiModal) {
     aiModal.onclick = (e) => {
       if (e.target === aiModal) {
-        aiModal.classList.add("hidden");
+        closeAIModalWithCheck();
       }
     };
+  }
+
+  // Sidebar click dismisses open modals
+  const sidebar = $("#sidebar");
+  if (sidebar) {
+    sidebar.addEventListener("click", () => {
+      if (!$("#confirm-modal").classList.contains("hidden")) {
+        $("#confirm-cancel").click();
+      }
+      if (!$("#prompt-modal").classList.contains("hidden")) {
+        $("#prompt-cancel").click();
+      }
+      if (!$("#data-modal").classList.contains("hidden")) {
+        $("#data-cancel").click();
+      }
+      if (!$("#ai-modal").classList.contains("hidden")) {
+        closeAIModalWithCheck();
+      }
+    });
   }
 
   $("#compare-button").onclick = compareRevision;
@@ -2014,7 +2124,7 @@ window.editWorkspace = async function(id, oldName) {
 
 window.deleteWorkspace = async function(id) {
   closeSheet();
-  if (!confirm("Hapus workspace ini beserta seluruh isinya secara permanen?")) return;
+  if (!(await showConfirm("Hapus workspace ini beserta seluruh isinya secara permanen?"))) return;
   try {
     const result = await jsonApi("/api/workspace/delete", {
       method: "POST",
@@ -2048,7 +2158,7 @@ window.editBrainItem = async function(type, idOrContent, currentContent) {
 };
 
 window.deleteBrainItem = async function(type, idOrContent) {
-  if (!confirm("Hapus item ini?")) return;
+  if (!(await showConfirm("Hapus item ini?"))) return;
   try {
     await jsonApi("/api/brain/item/delete", {
       method: "POST",
