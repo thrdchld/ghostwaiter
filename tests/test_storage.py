@@ -18,7 +18,7 @@ import backend.context as context_module
 
 class SafeIdTests(unittest.TestCase):
     def test_valid_ids_pass(self):
-        for value in ("writing", "chat_123", "abc-def", "a1B2", "x" * 64):
+        for value in ("personal", "chat_123", "abc-def", "a1B2", "x" * 64):
             self.assertEqual(safe_id(value), value)
 
     def test_rejects_path_traversal(self):
@@ -79,11 +79,11 @@ class JsonStoreInitTests(unittest.TestCase):
     def tearDown(self):
         self.tempdir.cleanup()
 
-    def test_default_workspace_is_writing(self):
-        self.assertEqual(self.store.active_workspace(), "writing")
+    def test_default_workspace_is_personal(self):
+        self.assertEqual(self.store.active_workspace(), "personal")
 
     def test_default_workspace_brain_files_exist(self):
-        brain = self.store.workspace_path("writing") / "brain"
+        brain = self.store.workspace_path("personal") / "brain"
         for fname in (
             "style_profile.json",
             "thinking_profile.json",
@@ -95,7 +95,7 @@ class JsonStoreInitTests(unittest.TestCase):
             self.assertTrue((brain / fname).exists(), f"Missing {fname}")
 
     def test_default_workspace_summary_exists(self):
-        summary = self.store.workspace_path("writing") / "summary" / "workspace_summary.json"
+        summary = self.store.workspace_path("personal") / "summary" / "workspace_summary.json"
         self.assertTrue(summary.exists())
 
     def test_system_files_initialized(self):
@@ -128,76 +128,76 @@ class EntityCRUDTests(unittest.TestCase):
 
     def test_save_and_get_entity(self):
         draft = {"id": "draft_abc", "title": "Hello", "content": "World"}
-        self.store.save_entity("writing", "drafts", draft)
-        result = self.store.get_entity("writing", "drafts", "draft_abc")
+        self.store.save_entity("personal", "drafts", draft)
+        result = self.store.get_entity("personal", "drafts", "draft_abc")
         self.assertEqual(result["title"], "Hello")
 
     def test_save_adds_schema_version(self):
         draft = {"id": "draft_sv", "title": "SV"}
-        saved = self.store.save_entity("writing", "drafts", draft)
+        saved = self.store.save_entity("personal", "drafts", draft)
         self.assertIn("schema_version", saved)
 
     def test_save_entity_returns_same_object(self):
         draft = {"id": "draft_ret", "title": "Return"}
-        result = self.store.save_entity("writing", "drafts", draft)
+        result = self.store.save_entity("personal", "drafts", draft)
         self.assertEqual(result["id"], "draft_ret")
 
     def test_get_entity_not_found_raises(self):
         with self.assertRaises(FileNotFoundError):
-            self.store.get_entity("writing", "drafts", "nonexistent_id")
+            self.store.get_entity("personal", "drafts", "nonexistent_id")
 
     def test_list_entities_empty(self):
-        items = self.store.list_entities("writing", "chats")
+        items = self.store.list_entities("personal", "chats")
         self.assertIsInstance(items, list)
 
     def test_list_entities_returns_all(self):
         for i in range(3):
             self.store.save_entity(
-                "writing", "drafts",
+                "personal", "drafts",
                 {"id": f"draft_x{i}", "title": f"D{i}", "updated_at": f"2024-01-0{i+1}T00:00:00+00:00"},
             )
-        items = self.store.list_entities("writing", "drafts")
+        items = self.store.list_entities("personal", "drafts")
         self.assertEqual(len(items), 3)
 
     def test_list_entities_sorted_newest_first(self):
         self.store.save_entity(
-            "writing", "drafts",
+            "personal", "drafts",
             {"id": "draft_old", "title": "Old", "updated_at": "2023-01-01T00:00:00+00:00"},
         )
         self.store.save_entity(
-            "writing", "drafts",
+            "personal", "drafts",
             {"id": "draft_new", "title": "New", "updated_at": "2025-01-01T00:00:00+00:00"},
         )
-        items = self.store.list_entities("writing", "drafts")
+        items = self.store.list_entities("personal", "drafts")
         self.assertEqual(items[0]["id"], "draft_new")
 
     def test_delete_entity_moves_to_archive(self):
-        self.store.save_entity("writing", "drafts", {"id": "draft_del", "title": "Del"})
-        self.store.delete_entity("writing", "drafts", "draft_del")
+        self.store.save_entity("personal", "drafts", {"id": "draft_del", "title": "Del"})
+        self.store.delete_entity("personal", "drafts", "draft_del")
         self.assertFalse(
-            (self.store.workspace_path("writing") / "drafts" / "draft_del.json").exists()
+            (self.store.workspace_path("personal") / "drafts" / "draft_del.json").exists()
         )
-        archive = self.store.root / "archive" / "drafts" / "writing"
+        archive = self.store.root / "archive" / "drafts" / "personal"
         backups = list(archive.glob("draft_del_*.json"))
         self.assertEqual(len(backups), 1)
 
     def test_delete_nonexistent_entity_raises(self):
         with self.assertRaises(FileNotFoundError):
-            self.store.delete_entity("writing", "drafts", "ghost_id1")
+            self.store.delete_entity("personal", "drafts", "ghost_id1")
 
     def test_permanently_delete_entity(self):
         chat = {"id": "chat_perm", "title": "P", "messages": [], "archived": True}
-        self.store.save_entity("writing", "chats", chat)
-        self.store.permanently_delete_entity("writing", "chats", "chat_perm")
+        self.store.save_entity("personal", "chats", chat)
+        self.store.permanently_delete_entity("personal", "chats", "chat_perm")
         self.assertFalse(
-            (self.store.workspace_path("writing") / "chats" / "chat_perm.json").exists()
+            (self.store.workspace_path("personal") / "chats" / "chat_perm.json").exists()
         )
-        backup = self.store.root / "archive" / "deleted" / "chats" / "writing"
+        backup = self.store.root / "archive" / "deleted" / "chats" / "personal"
         backups = list(backup.glob("chat_perm_*.json"))
         self.assertEqual(len(backups), 1)
 
     def test_save_entity_enqueues_sync(self):
-        self.store.save_entity("writing", "drafts", {"id": "draft_sync", "title": "S"})
+        self.store.save_entity("personal", "drafts", {"id": "draft_sync", "title": "S"})
         queue = self.store.read_json(self.store.root / "queue" / "pending_sync.json")
         ids = [item["payload"]["id"] for item in queue["items"]]
         self.assertIn("draft_sync", ids)
@@ -205,7 +205,7 @@ class EntityCRUDTests(unittest.TestCase):
     def test_safe_id_used_in_get_entity(self):
         """get_entity dengan id berbahaya harus raise ValueError/FileNotFoundError."""
         with self.assertRaises((ValueError, FileNotFoundError)):
-            self.store.get_entity("writing", "drafts", "../etc/passwd")
+            self.store.get_entity("personal", "drafts", "../etc/passwd")
 
 
 # ---------------------------------------------------------------------------
@@ -267,7 +267,7 @@ class WorkspaceManagementTests(unittest.TestCase):
 
     def test_cannot_delete_default_workspace(self):
         with self.assertRaises(ValueError):
-            self.store.delete_workspace("writing")
+            self.store.delete_workspace("personal")
 
     def test_delete_nonexistent_workspace_raises(self):
         with self.assertRaises(KeyError):
@@ -282,11 +282,11 @@ class WorkspaceManagementTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.store.set_active_workspace("unknown_ws3")
 
-    def test_delete_active_workspace_resets_to_writing(self):
+    def test_delete_active_workspace_resets_to_personal(self):
         ws = self.store.create_workspace("Temp")
         self.store.set_active_workspace(ws["id"])
         self.store.delete_workspace(ws["id"])
-        self.assertEqual(self.store.active_workspace(), "writing")
+        self.assertEqual(self.store.active_workspace(), "personal")
 
 
 # ---------------------------------------------------------------------------
@@ -390,14 +390,14 @@ class SyncQueueTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_enqueue_sync_appends_item(self):
-        self.store.enqueue_sync("drafts", "writing", {"id": "d1"})
+        self.store.enqueue_sync("drafts", "personal", {"id": "d1"})
         queue = self.store.read_json(self.store.root / "queue" / "pending_sync.json")
         self.assertEqual(len(queue["items"]), 1)
         self.assertEqual(queue["items"][0]["type"], "drafts")
 
     def test_enqueue_sync_capped_at_500(self):
         for i in range(505):
-            self.store.enqueue_sync("x", "writing", {"id": f"i{i}"})
+            self.store.enqueue_sync("x", "personal", {"id": f"i{i}"})
         queue = self.store.read_json(self.store.root / "queue" / "pending_sync.json")
         self.assertLessEqual(len(queue["items"]), 500)
 
@@ -419,28 +419,28 @@ class RequestedWorkspacesTests(unittest.TestCase):
 
     def test_no_cross_workspace_term_returns_empty(self):
         self.store.create_workspace("Marketing")
-        result = context_module.requested_workspaces("writing", "Apa isi draft affiliate?")
+        result = context_module.requested_workspaces("personal", "Apa isi draft affiliate?")
         self.assertEqual(result, [])
 
     def test_explicit_workspace_name_is_detected(self):
         ws = self.store.create_workspace("Marketing")
-        result = context_module.requested_workspaces("writing", "Baca workspace Marketing")
+        result = context_module.requested_workspaces("personal", "Baca workspace Marketing")
         self.assertIn(ws["id"], result)
 
     def test_current_workspace_not_included_in_cross(self):
-        result = context_module.requested_workspaces("writing", "Baca workspace writing")
-        self.assertNotIn("writing", result)
+        result = context_module.requested_workspaces("personal", "Baca workspace personal")
+        self.assertNotIn("personal", result)
 
     def test_case_insensitive_workspace_name(self):
         ws = self.store.create_workspace("BlogKu")
-        result = context_module.requested_workspaces("writing", "cek workspace blogku")
+        result = context_module.requested_workspaces("personal", "cek workspace blogku")
         self.assertIn(ws["id"], result)
 
     def test_multiple_workspace_terms_detected(self):
         ws1 = self.store.create_workspace("Alpha")
         ws2 = self.store.create_workspace("Beta")
         result = context_module.requested_workspaces(
-            "writing", "bandingkan workspace alpha dan beta"
+            "personal", "bandingkan workspace alpha dan beta"
         )
         self.assertIn(ws1["id"], result)
         self.assertIn(ws2["id"], result)
@@ -462,49 +462,49 @@ class BuildChatContextTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_context_contains_inventory_line(self):
-        ctx, extras = context_module.build_chat_context("writing", "Halo")
+        ctx, extras = context_module.build_chat_context("personal", "Halo")
         self.assertIn("Inventaris:", ctx)
 
     def test_context_includes_relevant_draft(self):
         self.store.save_entity(
-            "writing", "drafts",
+            "personal", "drafts",
             {"id": "draft_aff", "title": "Affiliate", "content": "Strategi soft selling produk."},
         )
-        ctx, extras = context_module.build_chat_context("writing", "Apa isi draft affiliate?")
+        ctx, extras = context_module.build_chat_context("personal", "Apa isi draft affiliate?")
         self.assertIn("Strategi soft selling", ctx)
 
     def test_extras_empty_when_no_cross_workspace(self):
-        _, extras = context_module.build_chat_context("writing", "Halo apa kabar?")
+        _, extras = context_module.build_chat_context("personal", "Halo apa kabar?")
         self.assertEqual(extras, [])
 
     def test_context_contains_app_map(self):
-        ctx, _ = context_module.build_chat_context("writing", "Bantuan")
+        ctx, _ = context_module.build_chat_context("personal", "Bantuan")
         self.assertIn("PETA APLIKASI GHOSTWAITER", ctx)
 
     def test_context_contains_access_note_when_no_extras(self):
-        ctx, _ = context_module.build_chat_context("writing", "Test")
+        ctx, _ = context_module.build_chat_context("personal", "Test")
         self.assertIn("Jangan membaca atau menyimpulkan data workspace lain", ctx)
 
     def test_context_contains_access_note_with_extras(self):
         ws = self.store.create_workspace("Lain")
         ctx, _ = context_module.build_chat_context(
-            "writing", f"Baca workspace {ws['name']}"
+            "personal", f"Baca workspace {ws['name']}"
         )
         self.assertIn("pengguna menyebutnya secara eksplisit", ctx)
 
     def test_draft_content_truncated_in_context(self):
         long_content = "X" * 2000
         self.store.save_entity(
-            "writing", "drafts",
+            "personal", "drafts",
             {"id": "draft_long1", "title": "LongDraft", "content": long_content},
         )
-        ctx, _ = context_module.build_chat_context("writing", "longdraft")
+        ctx, _ = context_module.build_chat_context("personal", "longdraft")
         # Konteks tidak boleh membawa seluruh 2000 karakter X
         self.assertLess(ctx.count("X"), 2000)
 
     def test_archived_chats_excluded_from_inventory(self):
         self.store.save_entity(
-            "writing", "chats",
+            "personal", "chats",
             {
                 "id": "chat_arch1",
                 "title": "Old",
@@ -513,7 +513,7 @@ class BuildChatContextTests(unittest.TestCase):
                 "updated_at": "2024-01-01T00:00:00+00:00",
             },
         )
-        ctx, _ = context_module.build_chat_context("writing", "berapa chat aktif?")
+        ctx, _ = context_module.build_chat_context("personal", "berapa chat aktif?")
         self.assertIn("0 chat aktif", ctx)
 
 

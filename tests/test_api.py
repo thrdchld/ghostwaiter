@@ -111,8 +111,8 @@ class WorkspaceApiTests(unittest.TestCase):
         r2 = client.post("/api/workspace/delete", json={"workspace_id": ws_id})
         self.assertEqual(r2.status_code, 200)
 
-    def test_cannot_delete_default_writing_workspace(self):
-        r = client.post("/api/workspace/delete", json={"workspace_id": "writing"})
+    def test_cannot_delete_default_personal_workspace(self):
+        r = client.post("/api/workspace/delete", json={"workspace_id": "personal"})
         self.assertIn(r.status_code, (400, 404))
 
     def test_switch_workspace(self):
@@ -137,35 +137,35 @@ class WorkspaceApiTests(unittest.TestCase):
 
 class DraftApiTests(unittest.TestCase):
     def setUp(self):
-        # Pastikan workspace writing tersedia
-        client.post("/api/workspace/switch", json={"workspace_id": "writing"})
+        # Pastikan workspace personal tersedia
+        client.post("/api/workspace/switch", json={"workspace_id": "personal"})
 
     def test_create_draft(self):
-        r = client.post("/api/draft/create", json={"workspace_id": "writing"})
+        r = client.post("/api/draft/create", json={"workspace_id": "personal"})
         self.assertEqual(r.status_code, 200)
         self.assertIn("id", r.json())
 
     def test_create_draft_with_title(self):
-        r = client.post("/api/draft/create", json={"workspace_id": "writing", "title": "My Draft"})
+        r = client.post("/api/draft/create", json={"workspace_id": "personal", "title": "My Draft"})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["title"], "My Draft")
 
     def test_get_draft(self):
-        r = client.post("/api/draft/create", json={"workspace_id": "writing"})
+        r = client.post("/api/draft/create", json={"workspace_id": "personal"})
         draft_id = r.json()["id"]
-        r2 = client.get(f"/api/draft/{draft_id}?workspace_id=writing")
+        r2 = client.get(f"/api/draft/{draft_id}?workspace_id=personal")
         self.assertEqual(r2.status_code, 200)
         self.assertEqual(r2.json()["id"], draft_id)
 
     def test_get_nonexistent_draft_returns_404(self):
-        r = client.get("/api/draft/nonexistent_id1?workspace_id=writing")
+        r = client.get("/api/draft/nonexistent_id1?workspace_id=personal")
         self.assertEqual(r.status_code, 404)
 
     def test_update_draft_title(self):
-        r = client.post("/api/draft/create", json={"workspace_id": "writing"})
+        r = client.post("/api/draft/create", json={"workspace_id": "personal"})
         draft_id = r.json()["id"]
         r2 = client.post("/api/draft/update", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "draft_id": draft_id,
             "title": "Updated Title",
         })
@@ -173,10 +173,10 @@ class DraftApiTests(unittest.TestCase):
         self.assertEqual(r2.json()["title"], "Updated Title")
 
     def test_update_draft_content(self):
-        r = client.post("/api/draft/create", json={"workspace_id": "writing"})
+        r = client.post("/api/draft/create", json={"workspace_id": "personal"})
         draft_id = r.json()["id"]
         r2 = client.post("/api/draft/update", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "draft_id": draft_id,
             "content": "Isi konten baru",
         })
@@ -185,35 +185,35 @@ class DraftApiTests(unittest.TestCase):
 
     def test_update_nonexistent_draft_returns_404(self):
         r = client.post("/api/draft/update", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "draft_id": "nonexistent_id2",
             "title": "X",
         })
         self.assertEqual(r.status_code, 404)
 
     def test_list_drafts(self):
-        r = client.get("/api/draft/list?workspace_id=writing")
+        r = client.get("/api/draft/list?workspace_id=personal")
         self.assertEqual(r.status_code, 200)
         self.assertIn("items", r.json())
 
     def test_list_drafts_search(self):
-        client.post("/api/draft/create", json={"workspace_id": "writing", "title": "Affiliate Review"})
-        r = client.get("/api/draft/list?workspace_id=writing&query=Affiliate")
+        client.post("/api/draft/create", json={"workspace_id": "personal", "title": "Affiliate Review"})
+        r = client.get("/api/draft/list?workspace_id=personal&query=Affiliate")
         self.assertEqual(r.status_code, 200)
         titles = [item["title"] for item in r.json()["items"]]
         self.assertTrue(any("Affiliate" in t for t in titles))
 
     def test_delete_draft(self):
-        r = client.post("/api/draft/create", json={"workspace_id": "writing"})
+        r = client.post("/api/draft/create", json={"workspace_id": "personal"})
         draft_id = r.json()["id"]
-        r2 = client.post("/api/draft/delete", json={"workspace_id": "writing", "draft_id": draft_id})
+        r2 = client.post("/api/draft/delete", json={"workspace_id": "personal", "draft_id": draft_id})
         self.assertEqual(r2.status_code, 200)
         # Harus tidak bisa diakses lagi
-        r3 = client.get(f"/api/draft/{draft_id}?workspace_id=writing")
+        r3 = client.get(f"/api/draft/{draft_id}?workspace_id=personal")
         self.assertEqual(r3.status_code, 404)
 
     def test_delete_nonexistent_draft_returns_404(self):
-        r = client.post("/api/draft/delete", json={"workspace_id": "writing", "draft_id": "nonexistent_id3"})
+        r = client.post("/api/draft/delete", json={"workspace_id": "personal", "draft_id": "nonexistent_id3"})
         self.assertEqual(r.status_code, 404)
 
 
@@ -223,45 +223,45 @@ class DraftApiTests(unittest.TestCase):
 
 class ChatApiTests(unittest.TestCase):
     def setUp(self):
-        client.post("/api/workspace/switch", json={"workspace_id": "writing"})
+        client.post("/api/workspace/switch", json={"workspace_id": "personal"})
 
     def test_new_chat(self):
-        r = client.post("/api/chat/new", json={"workspace_id": "writing"})
+        r = client.post("/api/chat/new", json={"workspace_id": "personal"})
         self.assertEqual(r.status_code, 200)
         self.assertIn("chat_id", r.json())
 
     def test_get_chat(self):
-        r = client.post("/api/chat/new", json={"workspace_id": "writing"})
+        r = client.post("/api/chat/new", json={"workspace_id": "personal"})
         chat_id = r.json()["chat_id"]
-        r2 = client.get(f"/api/chat/session/{chat_id}?workspace_id=writing")
+        r2 = client.get(f"/api/chat/session/{chat_id}?workspace_id=personal")
         self.assertEqual(r2.status_code, 200)
         self.assertEqual(r2.json()["id"], chat_id)
 
     def test_get_nonexistent_chat_returns_404(self):
-        r = client.get("/api/chat/session/nonexistent_id4?workspace_id=writing")
+        r = client.get("/api/chat/session/nonexistent_id4?workspace_id=personal")
         self.assertEqual(r.status_code, 404)
 
     def test_list_chats(self):
-        r = client.get("/api/chat/list?workspace_id=writing")
+        r = client.get("/api/chat/list?workspace_id=personal")
         self.assertEqual(r.status_code, 200)
         self.assertIn("items", r.json())
 
     def test_list_chats_archived_filter(self):
-        r1 = client.post("/api/chat/new", json={"workspace_id": "writing"})
+        r1 = client.post("/api/chat/new", json={"workspace_id": "personal"})
         chat_id = r1.json()["chat_id"]
-        client.post("/api/chat/archive", json={"workspace_id": "writing", "chat_id": chat_id})
-        r2 = client.get("/api/chat/list?workspace_id=writing&archived=true")
+        client.post("/api/chat/archive", json={"workspace_id": "personal", "chat_id": chat_id})
+        r2 = client.get("/api/chat/list?workspace_id=personal&archived=true")
         archived_ids = [item["id"] for item in r2.json()["items"]]
         self.assertIn(chat_id, archived_ids)
-        r3 = client.get("/api/chat/list?workspace_id=writing&archived=false")
+        r3 = client.get("/api/chat/list?workspace_id=personal&archived=false")
         active_ids = [item["id"] for item in r3.json()["items"]]
         self.assertNotIn(chat_id, active_ids)
 
     def test_rename_chat(self):
-        r = client.post("/api/chat/new", json={"workspace_id": "writing"})
+        r = client.post("/api/chat/new", json={"workspace_id": "personal"})
         chat_id = r.json()["chat_id"]
         r2 = client.post("/api/chat/rename", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "chat_id": chat_id,
             "title": "Chat Renamed",
         })
@@ -269,33 +269,33 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual(r2.json()["title"], "Chat Renamed")
 
     def test_archive_and_restore_chat(self):
-        r = client.post("/api/chat/new", json={"workspace_id": "writing"})
+        r = client.post("/api/chat/new", json={"workspace_id": "personal"})
         chat_id = r.json()["chat_id"]
         # Archive
-        r2 = client.post("/api/chat/archive", json={"workspace_id": "writing", "chat_id": chat_id})
+        r2 = client.post("/api/chat/archive", json={"workspace_id": "personal", "chat_id": chat_id})
         self.assertEqual(r2.status_code, 200)
-        chat = client.get(f"/api/chat/session/{chat_id}?workspace_id=writing").json()
+        chat = client.get(f"/api/chat/session/{chat_id}?workspace_id=personal").json()
         self.assertTrue(chat["archived"])
         # Restore
-        r3 = client.post("/api/chat/restore", json={"workspace_id": "writing", "chat_id": chat_id})
+        r3 = client.post("/api/chat/restore", json={"workspace_id": "personal", "chat_id": chat_id})
         self.assertEqual(r3.status_code, 200)
-        chat2 = client.get(f"/api/chat/session/{chat_id}?workspace_id=writing").json()
+        chat2 = client.get(f"/api/chat/session/{chat_id}?workspace_id=personal").json()
         self.assertFalse(chat2["archived"])
 
     def test_permanent_delete_requires_archived(self):
-        r = client.post("/api/chat/new", json={"workspace_id": "writing"})
+        r = client.post("/api/chat/new", json={"workspace_id": "personal"})
         chat_id = r.json()["chat_id"]
         # Tidak di-archive dulu → harus error
-        r2 = client.post("/api/chat/delete-permanent", json={"workspace_id": "writing", "chat_id": chat_id})
+        r2 = client.post("/api/chat/delete-permanent", json={"workspace_id": "personal", "chat_id": chat_id})
         self.assertIn(r2.status_code, (400, 409))
 
     def test_permanent_delete_archived_chat(self):
-        r = client.post("/api/chat/new", json={"workspace_id": "writing"})
+        r = client.post("/api/chat/new", json={"workspace_id": "personal"})
         chat_id = r.json()["chat_id"]
-        client.post("/api/chat/archive", json={"workspace_id": "writing", "chat_id": chat_id})
-        r2 = client.post("/api/chat/delete-permanent", json={"workspace_id": "writing", "chat_id": chat_id})
+        client.post("/api/chat/archive", json={"workspace_id": "personal", "chat_id": chat_id})
+        r2 = client.post("/api/chat/delete-permanent", json={"workspace_id": "personal", "chat_id": chat_id})
         self.assertEqual(r2.status_code, 200)
-        r3 = client.get(f"/api/chat/session/{chat_id}?workspace_id=writing")
+        r3 = client.get(f"/api/chat/session/{chat_id}?workspace_id=personal")
         self.assertEqual(r3.status_code, 404)
 
 
@@ -305,7 +305,7 @@ class ChatApiTests(unittest.TestCase):
 
 class BrainProfileApiTests(unittest.TestCase):
     def test_brain_profile_returns_expected_keys(self):
-        r = client.get("/api/brain/profile?workspace_id=writing")
+        r = client.get("/api/brain/profile?workspace_id=personal")
         self.assertEqual(r.status_code, 200)
         data = r.json()
         for key in ("style_profile", "thinking_profile", "rules", "memory",
@@ -322,7 +322,7 @@ class BrainItemApiTests(unittest.TestCase):
     def _add_style_rule(self, rule: str) -> None:
         """Tambah rule langsung ke store untuk persiapan test."""
         from backend.storage import store as app_store
-        brain = app_store.workspace_path("writing") / "brain"
+        brain = app_store.workspace_path("personal") / "brain"
         path = brain / "rules.json"
         data = app_store.read_json(path)
         data["items"].append(rule)
@@ -331,7 +331,7 @@ class BrainItemApiTests(unittest.TestCase):
     def test_update_style_brain_item(self):
         self._add_style_rule("Gunakan kalimat pendek")
         r = client.post("/api/brain/item/update", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "type": "style",
             "id_or_content": "Gunakan kalimat pendek",
             "new_content": "Gunakan kalimat pendek dan padat",
@@ -341,13 +341,13 @@ class BrainItemApiTests(unittest.TestCase):
     def test_delete_style_brain_item(self):
         self._add_style_rule("Style untuk dihapus")
         r = client.post("/api/brain/item/delete", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "type": "style",
             "id_or_content": "Style untuk dihapus",
         })
         self.assertEqual(r.status_code, 200)
         # Pastikan sudah tidak ada
-        r2 = client.get("/api/brain/profile?workspace_id=writing")
+        r2 = client.get("/api/brain/profile?workspace_id=personal")
         rules = r2.json()["rules"]
         self.assertNotIn("Style untuk dihapus", [r for r in rules])
 
@@ -360,7 +360,7 @@ class LearningProposalApiTests(unittest.TestCase):
     def _add_proposal(self, content: str = "Test proposal", ptype: str = "style") -> str:
         """Tambah proposal langsung ke store."""
         from backend.storage import store as app_store, new_id, now_iso
-        path = app_store.workspace_path("writing") / "brain" / "learning_proposals.json"
+        path = app_store.workspace_path("personal") / "brain" / "learning_proposals.json"
         data = app_store.read_json(path)
         pid = new_id("learn")
         data["items"].insert(0, {
@@ -376,7 +376,7 @@ class LearningProposalApiTests(unittest.TestCase):
 
     def test_list_proposals_default_pending(self):
         self._add_proposal("Proposal pending satu")
-        r = client.get("/api/brain/proposals?workspace_id=writing")
+        r = client.get("/api/brain/proposals?workspace_id=personal")
         self.assertEqual(r.status_code, 200)
         statuses = {item["status"] for item in r.json()["items"]}
         self.assertTrue(statuses.issubset({"pending"}))
@@ -384,7 +384,7 @@ class LearningProposalApiTests(unittest.TestCase):
     def test_approve_proposal(self):
         pid = self._add_proposal("Gunakan aktif voice")
         r = client.post("/api/brain/proposals/approve", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "proposal_id": pid,
         })
         self.assertEqual(r.status_code, 200)
@@ -393,14 +393,14 @@ class LearningProposalApiTests(unittest.TestCase):
     def test_reject_proposal(self):
         pid = self._add_proposal("Hindari kata baku")
         r = client.post("/api/brain/proposals/reject", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "proposal_id": pid,
         })
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["status"], "success")
         # Pastikan status di storage berubah ke rejected
         from backend.storage import store as app_store
-        path = app_store.workspace_path("writing") / "brain" / "learning_proposals.json"
+        path = app_store.workspace_path("personal") / "brain" / "learning_proposals.json"
         data = app_store.read_json(path)
         proposal = next((x for x in data["items"] if x["id"] == pid), None)
         self.assertIsNotNone(proposal)
@@ -408,14 +408,14 @@ class LearningProposalApiTests(unittest.TestCase):
 
     def test_approve_nonexistent_proposal_returns_404(self):
         r = client.post("/api/brain/proposals/approve", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "proposal_id": "nonexistent_prop1",
         })
         self.assertEqual(r.status_code, 404)
 
     def test_reject_nonexistent_proposal_returns_404(self):
         r = client.post("/api/brain/proposals/reject", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "proposal_id": "nonexistent_prop2",
         })
         self.assertEqual(r.status_code, 404)
@@ -424,7 +424,7 @@ class LearningProposalApiTests(unittest.TestCase):
         pid1 = self._add_proposal("Bulk approve 1")
         pid2 = self._add_proposal("Bulk approve 2")
         r = client.post("/api/brain/proposals/bulk", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "action": "approve",
             "proposal_ids": [pid1, pid2],
         })
@@ -435,7 +435,7 @@ class LearningProposalApiTests(unittest.TestCase):
         pid1 = self._add_proposal("Bulk reject 1")
         pid2 = self._add_proposal("Bulk reject 2")
         r = client.post("/api/brain/proposals/bulk", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "action": "reject",
             "proposal_ids": [pid1, pid2],
         })
@@ -445,12 +445,12 @@ class LearningProposalApiTests(unittest.TestCase):
         unique_rule = "Pakai kalimat aktif selalu9191"
         pid = self._add_proposal(unique_rule, ptype="style")
         client.post("/api/brain/proposals/approve", json={
-            "workspace_id": "writing",
+            "workspace_id": "personal",
             "proposal_id": pid,
         })
         # Rule harus masuk style_profile.rules
         from backend.storage import store as app_store
-        brain = app_store.workspace_path("writing") / "brain"
+        brain = app_store.workspace_path("personal") / "brain"
         style = app_store.read_json(brain / "style_profile.json")
         self.assertIn(unique_rule, style.get("rules", []))
 
@@ -458,10 +458,10 @@ class LearningProposalApiTests(unittest.TestCase):
         unique_rule = "Aturan unik anti duplikat6767"
         pid1 = self._add_proposal(unique_rule, ptype="style")
         pid2 = self._add_proposal(unique_rule, ptype="style")
-        client.post("/api/brain/proposals/approve", json={"workspace_id": "writing", "proposal_id": pid1})
-        client.post("/api/brain/proposals/approve", json={"workspace_id": "writing", "proposal_id": pid2})
+        client.post("/api/brain/proposals/approve", json={"workspace_id": "personal", "proposal_id": pid1})
+        client.post("/api/brain/proposals/approve", json={"workspace_id": "personal", "proposal_id": pid2})
         from backend.storage import store as app_store
-        brain = app_store.workspace_path("writing") / "brain"
+        brain = app_store.workspace_path("personal") / "brain"
         style = app_store.read_json(brain / "style_profile.json")
         count = style.get("rules", []).count(unique_rule)
         self.assertEqual(count, 1)
@@ -545,7 +545,7 @@ class ErrorFormatTests(unittest.TestCase):
     """Pastikan semua error response mengikuti format {status, message}."""
 
     def test_404_error_has_status_and_message(self):
-        r = client.get("/api/draft/totally_nonexistent_x?workspace_id=writing")
+        r = client.get("/api/draft/totally_nonexistent_x?workspace_id=personal")
         self.assertEqual(r.status_code, 404)
         data = r.json()
         self.assertIn("status", data)

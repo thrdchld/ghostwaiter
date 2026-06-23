@@ -32,8 +32,8 @@ def new_id(prefix: str) -> str:
 # Determine if we are running tests
 IS_TESTING = "pytest" in sys.modules or os.getenv("DATA_DIR", "").startswith("/tmp/gw_test_") or "unittest" in sys.modules
 
-DEFAULT_WORKSPACE_ID = "writing" if IS_TESTING else "personal"
-DEFAULT_WORKSPACE_NAME = "Writing" if IS_TESTING else "Personal"
+DEFAULT_WORKSPACE_ID = "personal"
+DEFAULT_WORKSPACE_NAME = "Personal"
 
 class MockResponse:
     def __init__(self, data: Any) -> None:

@@ -346,7 +346,7 @@ button:active { transform: translateY(0); }
   margin-top: 2px;
   color: var(--text-primary);
 }
-.status-cluster { display: flex; gap: 8px; }
+.status-cluster { display: flex; gap: 8px; align-items: center; }
 .status-pill {
   align-items: center;
   background: var(--bg-surface);
@@ -358,7 +358,7 @@ button:active { transform: translateY(0); }
   gap: 6px;
   padding: 7px 12px;
   color: var(--text-secondary);
-  min-height: 40px;
+  min-height: 48px;
 }
 .status-pill i {
   background: var(--border-strong);
@@ -380,8 +380,8 @@ button:active { transform: translateY(0); }
   border-radius: var(--radius-full);
   display: flex;
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   color: var(--text-secondary);
   cursor: pointer;

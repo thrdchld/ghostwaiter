@@ -470,7 +470,7 @@ function showWorkspaceSheet() {
       </button>
       <div style="padding-right: 16px; display:flex; gap:8px;">
          <button class="text-button accent" onclick="editWorkspace('${escapeHtml(item.id)}', '${escapeHtml(item.name).replace(/'/g, "\\'")}')" style="font-size:12px; padding:4px 8px;">Edit</button>
-         ${item.id === 'personal' || item.id === 'writing' ? '' : `<button class="text-button danger" onclick="deleteWorkspace('${escapeHtml(item.id)}')" style="font-size:12px; padding:4px 8px; color:var(--error);">Delete</button>`}
+         ${item.id === 'personal' ? '' : `<button class="text-button danger" onclick="deleteWorkspace('${escapeHtml(item.id)}')" style="font-size:12px; padding:4px 8px; color:var(--error);">Delete</button>`}
       </div>
     </div>`).join("");
   openSheet("Pilih workspace", `${items}
