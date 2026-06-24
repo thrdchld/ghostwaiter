@@ -1622,7 +1622,7 @@ function bindEvents() {
     };
   }
   if ($("#theme-button")) $("#theme-button").onclick = cycleTheme;
-  if ($("#language-settings-button")) $("#language-settings-button").onclick = showLanguageSheet;
+  if ($("#language-settings-button")) $("#language-settings-button").onclick = window.showLanguageSheet;
   if ($("#reset-data-button")) $("#reset-data-button").onclick = () => { $("#reset-modal").classList.remove("hidden"); };
   if ($("#reset-cancel")) $("#reset-cancel").onclick = () => { $("#reset-modal").classList.add("hidden"); };
   if ($("#reset-modal")) {
@@ -2652,7 +2652,6 @@ function initNotesSystem() {
   };
   
   // Search filter
-  const searchInput = $("#notes-search-input");
   let searchTimeout = null;
   searchInput.oninput = () => {
     clearTimeout(searchTimeout);
@@ -2663,9 +2662,9 @@ function initNotesSystem() {
   };
   
   // Bulk buttons
-  $("#notes-select-all-btn").onclick = () => notesSelectAll();
-  $("#notes-deselect-all-btn").onclick = () => notesDeselectAll();
-  $("#notes-bulk-delete-btn").onclick = () => notesBulkDelete();
+  $("#notes-select-all-btn").onclick = () => window.notesSelectAll();
+  $("#notes-deselect-all-btn").onclick = () => window.notesDeselectAll();
+  $("#notes-bulk-delete-btn").onclick = () => window.notesBulkDelete();
 }
 
 function expandNoteCreator() {
