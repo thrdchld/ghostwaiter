@@ -100,7 +100,7 @@
               </span>
             </span>
             <h1 id="chat-title" class="hidden">New Chat</h1>
-            <p class="section-desc">Diskusi konsep, susun argumen, atau tanya umpan balik dengan AI Coach.</p>
+            <p class="section-desc" id="desc-chat" data-i18n="desc_chat">Discuss concepts, structure arguments, or ask for feedback with the AI.</p>
           </div>
           <div style="display: flex; gap: 8px;">
             <button id="chat-list-button" class="icon-button" type="button" aria-label="Chat History">
@@ -219,7 +219,10 @@
         <div class="section-heading">
           <div>
             <span class="eyebrow">Quick Notes</span>
-            <h1>Notes</h1>
+            <h1 style="display: flex; align-items: center; gap: 8px;">
+              Notes
+              <div id="notes-loading-spinner" class="spinner-mini hidden"></div>
+            </h1>
             <p id="desc-notes" class="section-desc" data-i18n="desc_notes">Jot down quick ideas, attach images, manage tags, and pin your important notes.</p>
           </div>
           <div class="notes-view-toggle">

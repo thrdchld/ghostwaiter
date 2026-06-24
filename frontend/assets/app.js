@@ -1641,7 +1641,7 @@ function bindEvents() {
         
         const res = await jsonApi("/api/reset/database", { method: "POST" });
         toast(res.message || "Database reset successful", "success");
-        
+        localStorage.clear();
         setTimeout(() => window.location.reload(), 1500);
       } catch (err) {
         toast(err.message, "error");
@@ -2452,6 +2452,8 @@ function compressImage(file, maxSizeBytes = 128 * 1024) {
 // Notes list loader
 async function loadNotes() {
   if (!state.workspace) return;
+  const spinner = $("#notes-loading-spinner");
+  if (spinner) spinner.classList.remove("hidden");
   try {
     const res = await jsonApi(`/api/notes/list?workspace_id=${state.workspace}&query=${encodeURIComponent(state.notesSearch || '')}&tag=${encodeURIComponent(state.notesActiveTag || '')}`);
     state.notes = res.items || [];
@@ -2459,6 +2461,8 @@ async function loadNotes() {
   } catch (err) {
     console.error("Error loading notes", err);
     toast("Failed to load notes", "error");
+  } finally {
+    if (spinner) spinner.classList.add("hidden");
   }
 }
 
@@ -2710,17 +2714,24 @@ async function saveCurrentNoteFromCreator() {
     image: creatorImage
   };
   
+  // Collapse creator immediately in UI
+  collapseNoteCreator();
+  
+  const spinner = $("#notes-loading-spinner");
+  if (spinner) spinner.classList.remove("hidden");
+  
   try {
     await jsonApi("/api/notes/save", {
       method: "POST",
       body: payload
     });
     toast("Note saved", "success");
-    collapseNoteCreator();
-    loadNotes();
+    await loadNotes();
   } catch (err) {
     console.error(err);
     toast("Failed to save note", "error");
+  } finally {
+    if (spinner) spinner.classList.add("hidden");
   }
 }
 
@@ -2848,17 +2859,28 @@ window.embedEditNoteImage = function() {
 
 window.deleteNoteDirect = async function(noteId) {
   if (!confirm("Delete this note?")) return;
+  
+  const modal = $("#edit-note-modal");
+  if (modal) {
+    modal.remove();
+    window.currentEditNote = null;
+  }
+  
+  const spinner = $("#notes-loading-spinner");
+  if (spinner) spinner.classList.remove("hidden");
+  
   try {
     await jsonApi("/api/notes/delete", {
       method: "POST",
       body: { workspace_id: state.workspace, note_id: noteId }
     });
     toast("Note deleted", "success");
-    closeEditNoteModal(false);
-    loadNotes();
+    await loadNotes();
   } catch (err) {
     console.error(err);
     toast("Failed to delete note", "error");
+  } finally {
+    if (spinner) spinner.classList.add("hidden");
   }
 };
 
@@ -2866,13 +2888,14 @@ window.closeEditNoteModal = async function(save = true) {
   const modal = $("#edit-note-modal");
   if (!modal) return;
   
+  let payload = null;
   if (save && window.currentEditNote) {
     const title = $("#edit-note-title").value.trim();
     const content = $("#edit-note-content").value.trim();
     const tagsStr = $("#edit-note-tags").value.trim();
     const tags = tagsStr ? tagsStr.split(",").map(t => t.trim()).filter(t => t.length > 0) : [];
     
-    const payload = {
+    payload = {
       workspace_id: state.workspace,
       id: window.currentEditNote.id,
       title,
@@ -2881,21 +2904,27 @@ window.closeEditNoteModal = async function(save = true) {
       tags,
       image: window.currentEditNote.image
     };
-    
+  }
+  
+  modal.remove();
+  window.currentEditNote = null;
+  
+  if (payload) {
+    const spinner = $("#notes-loading-spinner");
+    if (spinner) spinner.classList.remove("hidden");
     try {
       await jsonApi("/api/notes/save", {
         method: "POST",
         body: payload
       });
-      loadNotes();
+      await loadNotes();
     } catch (err) {
       console.error(err);
       toast("Failed to save note changes", "error");
+    } finally {
+      if (spinner) spinner.classList.add("hidden");
     }
   }
-  
-  modal.remove();
-  window.currentEditNote = null;
 };
 
 // Toggle note pin
@@ -2905,6 +2934,11 @@ window.toggleNotePin = async function(noteId) {
   
   note.pinned = !note.pinned;
   note.updated_at = new Date().toISOString();
+  
+  renderNotes();
+  
+  const spinner = $("#notes-loading-spinner");
+  if (spinner) spinner.classList.remove("hidden");
   
   try {
     await jsonApi("/api/notes/save", {
@@ -2919,10 +2953,12 @@ window.toggleNotePin = async function(noteId) {
         image: note.image
       }
     });
-    loadNotes();
+    await loadNotes();
   } catch (err) {
     console.error(err);
     toast("Failed to update note pin", "error");
+  } finally {
+    if (spinner) spinner.classList.add("hidden");
   }
 };
 

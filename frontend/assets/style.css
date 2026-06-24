@@ -1708,6 +1708,16 @@ select:focus, input:focus, textarea:focus { border-color: var(--border-strong); 
   border-top-color: #fff;
   animation: spin 1s ease-in-out infinite;
 }
+.spinner-mini {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ─── Loading Overlay (Issue #3) ────────────────────────────────────────── */
@@ -2006,10 +2016,26 @@ details.accordion-clean summary::-webkit-details-marker {
 .notes-container {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
+}
+
+#notes-tag-filters-container {
+  margin-top: -8px !important;
+  margin-bottom: 8px !important;
+  padding: 0 !important;
+}
+
+.note-creator-title:focus,
+.note-creator-content:focus,
+.note-creator-tags-input:focus,
+#notes-search-input:focus {
+  border: 0 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
 }
 
 /* Note Creator */

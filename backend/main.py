@@ -1695,11 +1695,11 @@ def reset_database() -> dict[str, str]:
         for row in drafts_res.data or []:
             store.client.table("drafts").delete().eq("id", row["id"]).execute()
             
-        # Delete workspaces except "__system__" and the default workspace
+        # Delete workspaces except "__system__"
         ws_res = store.client.table("workspaces").select("id").execute()
         for row in ws_res.data or []:
             ws_id = row["id"]
-            if ws_id not in ("__system__", DEFAULT_WORKSPACE_ID):
+            if ws_id != "__system__":
                 store.client.table("workspaces").delete().eq("id", ws_id).execute()
                 
         # Reset __system__ workspace settings
