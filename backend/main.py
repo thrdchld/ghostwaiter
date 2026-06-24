@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from .ai import AIUnavailable, ai_service
 from .config import ROOT_DIR, settings
 from .context import build_chat_context
-from .storage import new_id, now_iso, safe_id, store
+from .storage import new_id, now_iso, safe_id, store, DEFAULT_WORKSPACE_ID, DEFAULT_WORKSPACE_NAME, SCHEMA_VERSION
 
 
 FRONTEND_DIR = ROOT_DIR / "frontend"
@@ -859,7 +859,7 @@ async def learn_raw(req: RawWritingRequest, auth: tuple[str, str, str] = Depends
     prompt = (
         "Analyze the following writing style. Reply with one concrete, concise style rule "
         "that can be reapplied. Do not summarize the content. "
-        "Write the rule in Indonesian."
+        "Write the rule in the same language as the writing sample."
     )
     try:
         rule = (
@@ -1680,6 +1680,125 @@ def import_data(file: UploadFile = File(...)) -> dict[str, str]:
 @app.get("/api/offline/cache/status")
 def offline_status() -> dict[str, Any]:
     return {"status": "available", "strategy": "service-worker-shell-and-local-draft"}
+
+
+@app.post("/api/reset/database", dependencies=[Depends(require_auth)])
+def reset_database() -> dict[str, str]:
+    try:
+        # Delete all chats
+        chats_res = store.client.table("chats").select("id").execute()
+        for row in chats_res.data or []:
+            store.client.table("chats").delete().eq("id", row["id"]).execute()
+            
+        # Delete all drafts
+        drafts_res = store.client.table("drafts").select("id").execute()
+        for row in drafts_res.data or []:
+            store.client.table("drafts").delete().eq("id", row["id"]).execute()
+            
+        # Delete workspaces except "__system__" and the default workspace
+        ws_res = store.client.table("workspaces").select("id").execute()
+        for row in ws_res.data or []:
+            ws_id = row["id"]
+            if ws_id not in ("__system__", DEFAULT_WORKSPACE_ID):
+                store.client.table("workspaces").delete().eq("id", ws_id).execute()
+                
+        # Reset __system__ workspace settings
+        timestamp = now_iso()
+        system_data = {
+            "settings": {
+                "schema_version": SCHEMA_VERSION,
+                "active_workspace": DEFAULT_WORKSPACE_ID,
+                "theme": "auto",
+                "sync_status": "idle",
+                "last_sync": "",
+            },
+            "models": {
+                "schema_version": SCHEMA_VERSION,
+                "provider": "",
+                "model": "",
+                "last_updated": "",
+            },
+            "workspaces": {
+                "schema_version": SCHEMA_VERSION,
+                "default_workspace": DEFAULT_WORKSPACE_ID,
+                "items": [
+                    {
+                        "id": DEFAULT_WORKSPACE_ID,
+                        "name": DEFAULT_WORKSPACE_NAME,
+                        "created_at": timestamp,
+                        "updated_at": timestamp,
+                    }
+                ],
+            },
+            "pending_sync": {"schema_version": SCHEMA_VERSION, "items": []},
+            "snapshots_manifest": {"schema_version": SCHEMA_VERSION, "items": []},
+            "ai_config": {"provider": "", "model": "", "keys": {}}
+        }
+        store.client.table("workspaces").upsert({"id": "__system__", "data": system_data}).execute()
+        
+        # Re-initialize the default workspace
+        store.ensure_workspace(DEFAULT_WORKSPACE_ID, DEFAULT_WORKSPACE_NAME)
+        
+        return {"status": "success", "message": "Database reset successful"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/reset/github", dependencies=[Depends(require_auth)])
+async def reset_github() -> dict[str, str]:
+    if not settings.github_token or not settings.github_repo:
+        raise HTTPException(status_code=400, detail="GITHUB_TOKEN or GITHUB_BACKUP_REPO is not configured")
+    owner_repo = settings.github_repo.removeprefix("https://github.com/").removesuffix(".git").strip("/")
+    if owner_repo.count("/") != 1:
+        raise HTTPException(status_code=400, detail="Format GITHUB_BACKUP_REPO harus owner/repo")
+        
+    headers = {
+        "Authorization": f"Bearer {settings.github_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    
+    async with httpx.AsyncClient(timeout=60, headers=headers) as client:
+        # Get default branch
+        repo_url = f"https://api.github.com/repos/{owner_repo}"
+        repo_res = await client.get(repo_url)
+        if repo_res.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch repo info: {repo_res.status_code}")
+        default_branch = repo_res.json().get("default_branch", "main")
+        
+        # Get the ref commit sha to fetch the tree
+        ref_url = f"https://api.github.com/repos/{owner_repo}/git/ref/heads/{default_branch}"
+        ref_res = await client.get(ref_url)
+        if ref_res.status_code == 404:
+            return {"status": "success", "message": "GitHub backup was already clean (empty repository)"}
+        elif ref_res.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch branch ref: {ref_res.status_code}")
+            
+        commit_sha = ref_res.json()["object"]["sha"]
+        tree_url = f"https://api.github.com/repos/{owner_repo}/git/trees/{commit_sha}?recursive=1"
+        tree_res = await client.get(tree_url)
+        if tree_res.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch tree: {tree_res.status_code}")
+            
+        tree = tree_res.json().get("tree", [])
+        backup_item = next((item for item in tree if item["path"] == "supabase_backup.json"), None)
+        
+        if not backup_item:
+            return {"status": "success", "message": "GitHub backup was already clean"}
+            
+        # Delete file via contents API
+        delete_url = f"https://api.github.com/repos/{owner_repo}/contents/supabase_backup.json"
+        payload = {
+            "message": "Reset/delete backup file",
+            "sha": backup_item["sha"],
+            "branch": default_branch
+        }
+        delete_res = await client.request("DELETE", delete_url, json=payload)
+        if delete_res.status_code not in (200, 204):
+            raise HTTPException(status_code=502, detail=f"Failed to delete backup file: {delete_res.status_code} {delete_res.text[:200]}")
+            
+    return {"status": "success", "message": "GitHub backup deleted successfully"}
+
 
 
 app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")

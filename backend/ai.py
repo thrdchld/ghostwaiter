@@ -166,7 +166,7 @@ class AIService:
             "Compare the AI output with the user's revision. Output only valid JSON in the format "
             '{"style_rules":["..."],"thinking_patterns":["..."]}. '
             "Maximum 3 items per list, concrete, concise, and do not discuss the content/topic itself. "
-            "Write the style_rules and thinking_patterns in Indonesian."
+            "Write the style_rules and thinking_patterns in the same language as the user's revision."
         )
         result = await self.complete(
             api_key, model,
@@ -200,7 +200,7 @@ class AIService:
             '"proposals":[{"type":"style|thinking|memory|rule","content":"proposal"}]}. '
             "Summary and concepts must be factual. Proposals are for user preferences or explicit facts only, "
             "max 4, no duplicates, and do not treat regular questions as permanent preferences. "
-            "Write all summaries, concepts, and proposals in Indonesian."
+            "Write all summaries, concepts, and proposals in the same language as the conversation."
         )
         result = await self.complete(
             api_key, model,

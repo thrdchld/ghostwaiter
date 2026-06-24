@@ -252,8 +252,8 @@ class SupabaseStore:
                     self.write_json(self.root / "queue" / "pending_sync.json", system_data["pending_sync"])
                     self.write_json(self.root / "snapshots" / "manifest.json", system_data["snapshots_manifest"])
 
-            # Migration check: if 'writing' exists, migrate it to 'personal' (only in production)
-            if not IS_TESTING:
+            # Migration check: if 'writing' exists, migrate it to 'personal'
+            if True:
                 try:
                     sys_res = self.client.table("workspaces").select("data").eq("id", "__system__").execute()
                     if sys_res.data:

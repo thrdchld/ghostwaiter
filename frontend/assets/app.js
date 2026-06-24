@@ -19,6 +19,7 @@ let generateAbortController = null;
 const $$ = selector => [...document.querySelectorAll(selector)];
 
 const state = {
+  language: localStorage.getItem("ghostwaiter:language") || "en",
   workspace: "personal",
   workspaces: [],
   currentChat: null,
@@ -40,6 +41,47 @@ const state = {
   notesSelected: new Set(),
   notesSearch: "",
   notesActiveTag: "",
+};
+
+async function loadTranslations() {
+  const lang = state.language || "en";
+  try {
+    const res = await fetch(`/assets/locales/${lang}.json`);
+    if (!res.ok) throw new Error("Failed to load translation file");
+    const dict = await res.json();
+    for (const key in dict) {
+      const el = $(`[data-i18n="${key}"]`);
+      if (el) el.textContent = dict[key];
+    }
+  } catch (err) {
+    console.error("Translation load error:", err);
+  }
+}
+
+window.showLanguageSheet = function() {
+  const currentLang = state.language || "en";
+  const options = `
+    <button class="sheet-option language-option ${currentLang === 'en' ? 'active' : ''}" data-lang="en" type="button" style="flex:1; justify-content: space-between; display: flex; align-items: center; width: 100%;">
+      <span>English</span>
+      ${currentLang === 'en' ? '<b>✓</b>' : ''}
+    </button>
+    <button class="sheet-option language-option" data-lang="id" type="button" style="flex:1; justify-content: space-between; display: flex; align-items: center; width: 100%; color:var(--text-muted); opacity: 0.6;" disabled>
+      <span>Bahasa Indonesia (Coming Soon)</span>
+    </button>
+  `;
+  openSheet("Select Language", options);
+  
+  $$(".language-option").forEach(button => {
+    button.onclick = async () => {
+      const lang = button.dataset.lang;
+      if (lang === "id") return; // disabled
+      state.language = lang;
+      localStorage.setItem("ghostwaiter:language", lang);
+      closeSheet();
+      await loadTranslations();
+      toast("Language changed");
+    };
+  });
 };
 
 async function api(path, options = {}) {
@@ -343,6 +385,7 @@ async function initialize() {
   $("#app").classList.remove("hidden");
   
   applyTheme();
+  await loadTranslations();
   let sidebarState = localStorage.getItem("ghostwaiter:sidebar") || "expanded";
   if (window.innerWidth <= 780) sidebarState = "minimized";
   
@@ -1018,7 +1061,7 @@ async function renderChatHistory(archived) {
           ? `<button class="mini-button restore-chat" data-id="${escapeHtml(item.id)}">Restore</button><button class="mini-button danger purge-chat" data-id="${escapeHtml(item.id)}">Delete</button>`
           : `<button class="mini-button rename-chat" data-id="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title)}">Edit</button><button class="mini-button danger archive-chat" data-id="${escapeHtml(item.id)}">Archive</button>`}
       </div>
-    </div>`).join("") || `<p class="empty-state" style="min-height:180px">${archived ? "Arsip kosong." : "Belum ada riwayat."}</p>`;
+    </div>`).join("") || `<p class="empty-state" style="min-height:180px">${archived ? "Archive is empty." : "No history yet."}</p>`;
   $$(".chat-option").forEach(button => button.onclick = () => loadChat(button.dataset.id));
   $$(".rename-chat").forEach(button => button.onclick = () => renameChat(button.dataset.id, button.dataset.title));
   $$(".archive-chat").forEach(button => button.onclick = () => archiveChat(button.dataset.id));
@@ -1200,7 +1243,7 @@ async function showDraftList() {
   const html = data.items.map(item => `
     <button class="sheet-option draft-option" data-id="${escapeHtml(item.id)}" type="button">
       <span><strong>${escapeHtml(item.title)}</strong><small>${new Date(item.updated_at).toLocaleString("en-US")}</small></span><b>›</b>
-    </button>`).join("") || `<p class="empty-state" style="min-height:180px">Belum ada draft.</p>`;
+    </button>`).join("") || `<p class="empty-state" style="min-height:180px">No drafts yet.</p>`;
   openSheet("Draft", html);
   $$(".draft-option").forEach(button => button.onclick = () => loadDraft(button.dataset.id));
 }
@@ -1268,20 +1311,20 @@ function renderBrainTab() {
       <article class="insight-card">
         <p>${escapeHtml(item)}</p>
         <div class="insight-meta" style="display:flex; gap:12px; margin-top:8px;">
-          <button class="text-button compact" onclick="editBrainItem('style', '${escapeHtml(item).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}')">Edit</button>
+          <button class="text-button compact success" onclick="editBrainItem('style', '${escapeHtml(item).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}')">Edit</button>
           <button class="text-button compact danger" onclick="deleteBrainItem('style', '${escapeHtml(item).replace(/'/g, "\\'")}')">Delete</button>
         </div>
-      </article>`).join("") : `<div class="empty-state" style="min-height:240px"><strong>Belum ada pola.</strong><span>Latih revisi atau sediakan sampel tulisan.</span></div>`;
+      </article>`).join("") : `<div class="empty-state" style="min-height:240px"><strong>No patterns yet.</strong><span>Train revisions or provide writing samples.</span></div>`;
   } else if (state.brainTab === "thinking") {
     const items = state.brain.thinking_profile.patterns || [];
     list.innerHTML = items.length ? items.map(item => `
       <article class="insight-card">
         <p>${escapeHtml(item)}</p>
         <div class="insight-meta" style="display:flex; gap:12px; margin-top:8px;">
-          <button class="text-button compact" onclick="editBrainItem('thinking', '${escapeHtml(item).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}')">Edit</button>
+          <button class="text-button compact success" onclick="editBrainItem('thinking', '${escapeHtml(item).replace(/'/g, "\\'")}', '${escapeHtml(item).replace(/'/g, "\\'")}')">Edit</button>
           <button class="text-button compact danger" onclick="deleteBrainItem('thinking', '${escapeHtml(item).replace(/'/g, "\\'")}')">Delete</button>
         </div>
-      </article>`).join("") : `<div class="empty-state" style="min-height:240px"><strong>Belum ada pola pemikiran.</strong></div>`;
+      </article>`).join("") : `<div class="empty-state" style="min-height:240px"><strong>No thinking patterns yet.</strong></div>`;
   } else if (state.brainTab === "memory") {
     const mems = state.brain.memory || [];
     const convMems = state.brain.conversation_memory || [];
@@ -1290,10 +1333,10 @@ function renderBrainTab() {
       <article class="insight-card">
         <p>${escapeHtml(item.content)}</p>
         <div class="insight-meta" style="display:flex; gap:12px; margin-top:8px;">
-          <button class="text-button compact" onclick="editBrainItem('memory', '${escapeHtml(item.id)}', '${escapeHtml(item.content).replace(/'/g, "\\'")}')">Edit</button>
+          <button class="text-button compact success" onclick="editBrainItem('memory', '${escapeHtml(item.id)}', '${escapeHtml(item.content).replace(/'/g, "\\'")}')">Edit</button>
           <button class="text-button compact danger" onclick="deleteBrainItem('memory', '${escapeHtml(item.id)}')">Delete</button>
         </div>
-      </article>`).join("") : `<div class="empty-state" style="min-height:240px"><strong>Belum ada memori.</strong></div>`;
+      </article>`).join("") : `<div class="empty-state" style="min-height:240px"><strong>No memory yet.</strong></div>`;
   }
 }
 
@@ -1579,6 +1622,52 @@ function bindEvents() {
     };
   }
   if ($("#theme-button")) $("#theme-button").onclick = cycleTheme;
+  if ($("#language-settings-button")) $("#language-settings-button").onclick = showLanguageSheet;
+  if ($("#reset-data-button")) $("#reset-data-button").onclick = () => { $("#reset-modal").classList.remove("hidden"); };
+  if ($("#reset-cancel")) $("#reset-cancel").onclick = () => { $("#reset-modal").classList.add("hidden"); };
+  if ($("#reset-modal")) {
+    $("#reset-modal").onclick = (e) => {
+      if (e.target === $("#reset-modal")) $("#reset-modal").classList.add("hidden");
+    };
+  }
+  
+  if ($("#reset-db-btn")) {
+    $("#reset-db-btn").onclick = async () => {
+      if (!(await showConfirm("Are you absolutely sure you want to reset the Database? This will permanently delete all workspace data, chats, and drafts, keeping only a clean Personal workspace."))) return;
+      try {
+        $("#reset-modal").classList.add("hidden");
+        $("#loading-text").textContent = "Resetting database...";
+        $("#loading-overlay").classList.remove("hidden");
+        
+        const res = await jsonApi("/api/reset/database", { method: "POST" });
+        toast(res.message || "Database reset successful", "success");
+        
+        setTimeout(() => window.location.reload(), 1500);
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        $("#loading-overlay").classList.add("hidden");
+      }
+    };
+  }
+
+  if ($("#reset-github-btn")) {
+    $("#reset-github-btn").onclick = async () => {
+      if (!(await showConfirm("Are you absolutely sure you want to delete your GitHub backup? This will delete the backup file in your repository."))) return;
+      try {
+        $("#reset-modal").classList.add("hidden");
+        $("#loading-text").textContent = "Deleting GitHub backup...";
+        $("#loading-overlay").classList.remove("hidden");
+        
+        const res = await jsonApi("/api/reset/github", { method: "POST" });
+        toast(res.message || "GitHub backup reset successful", "success");
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        $("#loading-overlay").classList.add("hidden");
+      }
+    };
+  }
   
   const writeDropdownTrigger = $("#write-mode-trigger");
   const writeDropdownMenu = $("#write-mode-menu");
@@ -2453,7 +2542,48 @@ function initNotesSystem() {
   
   if (!collapsed || !expanded || !creator) return;
   
+  const searchBtn = $("#notes-mode-search-btn");
+  const createBtn = $("#notes-mode-create-btn");
+  const rowCreate = $("#note-creator-collapsed-create");
+  const rowSearch = $("#note-creator-collapsed-search");
+  const tagFiltersContainer = $("#notes-tag-filters-container");
+  const searchInput = $("#notes-search-input");
+  
+  if (searchBtn) {
+    searchBtn.onclick = (e) => {
+      e.stopPropagation();
+      rowCreate.classList.add("hidden");
+      rowSearch.classList.remove("hidden");
+      tagFiltersContainer.classList.remove("hidden");
+      searchInput.focus();
+    };
+  }
+  
+  if (createBtn) {
+    createBtn.onclick = (e) => {
+      e.stopPropagation();
+      rowSearch.classList.add("hidden");
+      rowCreate.classList.remove("hidden");
+      tagFiltersContainer.classList.add("hidden");
+      searchInput.value = "";
+      state.notesSearch = "";
+      state.notesActiveTag = "";
+      loadNotes();
+    };
+  }
+  
+  const uploadBtnCollapsed = $("#note-upload-btn-collapsed");
+  if (uploadBtnCollapsed) {
+    uploadBtnCollapsed.onclick = (e) => {
+      e.stopPropagation();
+      expandNoteCreator();
+      $("#note-file-input").click();
+    };
+  }
+  
   collapsed.onclick = (e) => {
+    if (!rowSearch.classList.contains("hidden")) return;
+    if (e.target.closest("button")) return;
     e.stopPropagation();
     expandNoteCreator();
   };
@@ -2926,6 +3056,14 @@ function renderTagFilters() {
 
 window.filterNotesByTag = function(tag) {
   state.notesActiveTag = tag;
+  if (tag) {
+    const rowCreate = $("#note-creator-collapsed-create");
+    const rowSearch = $("#note-creator-collapsed-search");
+    const tagFiltersContainer = $("#notes-tag-filters-container");
+    if (rowCreate) rowCreate.classList.add("hidden");
+    if (rowSearch) rowSearch.classList.remove("hidden");
+    if (tagFiltersContainer) tagFiltersContainer.classList.remove("hidden");
+  }
   loadNotes();
 };
 
