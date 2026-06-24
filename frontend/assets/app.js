@@ -405,6 +405,14 @@ async function initialize() {
   await loadWorkspaces();
   runBackgroundNoteSync();
   if (lastView === "notes") loadNotes();
+  
+  setInterval(() => {
+    const activeView = localStorage.getItem("ghostwaiter:activeView");
+    if (activeView === "notes" && !document.hidden) {
+      loadNotes(true);
+    }
+  }, 4000);
+
   await Promise.all([loadSyncStatus(), syncAIConfigFromSupabase()]);
   restoreLocalDraft();
   restoreChatDraft();
@@ -604,6 +612,39 @@ async function handleAttachmentSelect(event) {
   event.target.value = ""; // Reset file input
   renderAttachmentPreviews();
   saveChatDraft();
+}
+
+async function processChatPastedImage(file) {
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
+  if (file.size > MAX_FILE_SIZE) {
+    toast(`Pasted image is too large (max 5MB)`, "error");
+    return;
+  }
+  
+  const name = "pasted_image_" + Date.now() + ".png";
+  if (state.attachments.some(a => a.name === name)) return;
+  
+  const attachment = {
+    name: name,
+    size: file.size,
+    type: file.type,
+    content: ""
+  };
+  
+  try {
+    attachment.content = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(new Error("Failed to read image"));
+      reader.readAsDataURL(file);
+    });
+    
+    state.attachments.push(attachment);
+    renderAttachmentPreviews();
+    saveChatDraft();
+  } catch (err) {
+    toast(err.message, "error");
+  }
 }
 
 function renderAttachmentPreviews() {
@@ -1562,7 +1603,17 @@ async function loadSyncStatus() {
 }
 
 function bindEvents() {
-  if ($("#model-status")) $("#model-status").onclick = () => { const provider = localStorage.getItem("ghostwaiter:ai_provider") || "openrouter"; const m = localStorage.getItem("ghostwaiter:openrouter_model"); const k = localStorage.getItem(`ghostwaiter:key_${provider}`) || localStorage.getItem("ghostwaiter:openrouter_key"); toast(m && k ? `${provider.toUpperCase()} · ${m}` : "AI not configured — open Settings → AI Provider", m && k ? "success" : "error"); };
+  if ($("#model-status")) $("#model-status").onclick = () => {
+    const provider = localStorage.getItem("ghostwaiter:ai_provider") || "openrouter";
+    const m = localStorage.getItem("ghostwaiter:openrouter_model");
+    const k = localStorage.getItem(`ghostwaiter:key_${provider}`) || localStorage.getItem("ghostwaiter:openrouter_key");
+    if (m && k) {
+      toast(`${provider.toUpperCase()} · ${m}`, "success");
+    } else {
+      toast("Please select your AI provider and model first", "error");
+      $("#ai-settings-button")?.click();
+    }
+  };
   if ($("#new-chat-button")) $("#new-chat-button").onclick = () => { resetChat(); closeSheet(); };
   document.addEventListener("keydown", (e) => {
     const el = e.target;
@@ -1955,6 +2006,20 @@ function bindEvents() {
       }
     };
     
+    chatInput.addEventListener("paste", async (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.indexOf("image") !== -1) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            await processChatPastedImage(file);
+          }
+        }
+      }
+    });
+
     chatInput.addEventListener("input", () => {
       autoResizeChatInput();
       saveChatDraft();
@@ -2579,16 +2644,18 @@ async function runBackgroundNoteSync() {
   }
 }
 
-async function loadNotes() {
+async function loadNotes(silent = false) {
   if (!state.workspace) return;
   
-  const cached = localStorage.getItem(`ghostwaiter:notes_${state.workspace}`);
-  if (cached) {
-    try {
-      state.notes = JSON.parse(cached);
-      renderNotes();
-    } catch (e) {
-      console.error("Failed to parse cached notes", e);
+  if (!silent) {
+    const cached = localStorage.getItem(`ghostwaiter:notes_${state.workspace}`);
+    if (cached) {
+      try {
+        state.notes = JSON.parse(cached);
+        renderNotes();
+      } catch (e) {
+        console.error("Failed to parse cached notes", e);
+      }
     }
   }
   
@@ -2597,18 +2664,22 @@ async function loadNotes() {
   }
   
   const spinner = $("#notes-loading-spinner");
-  if (spinner) spinner.classList.remove("hidden");
+  if (spinner && !silent) spinner.classList.remove("hidden");
   try {
     const res = await jsonApi(`/api/notes/list?workspace_id=${state.workspace}&query=${encodeURIComponent(state.notesSearch || '')}&tag=${encodeURIComponent(state.notesActiveTag || '')}`);
     if (getNotesSyncQueue().length === 0) {
-      state.notes = res.items || [];
-      localStorage.setItem(`ghostwaiter:notes_${state.workspace}`, JSON.stringify(state.notes));
-      renderNotes();
+      const oldNotesStr = JSON.stringify(state.notes);
+      const newNotesStr = JSON.stringify(res.items || []);
+      if (oldNotesStr !== newNotesStr) {
+        state.notes = res.items || [];
+        localStorage.setItem(`ghostwaiter:notes_${state.workspace}`, JSON.stringify(state.notes));
+        renderNotes();
+      }
     }
   } catch (err) {
     console.error("Error loading notes", err);
   } finally {
-    if (spinner) spinner.classList.add("hidden");
+    if (spinner && !silent) spinner.classList.add("hidden");
   }
 }
 
@@ -2815,6 +2886,31 @@ function initNotesSystem() {
   $("#notes-select-all-btn").onclick = () => window.notesSelectAll();
   $("#notes-deselect-all-btn").onclick = () => window.notesDeselectAll();
   $("#notes-bulk-delete-btn").onclick = () => window.notesBulkDelete();
+
+  const handleNoteCreatorPaste = async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.indexOf("image") !== -1) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          try {
+            expandNoteCreator();
+            const compressed = await compressImage(file);
+            creatorImage = compressed;
+            $("#note-preview-img").src = compressed;
+            $("#note-image-preview").classList.remove("hidden");
+          } catch (err) {
+            console.error(err);
+            toast("Image compression failed", "error");
+          }
+        }
+      }
+    }
+  };
+  $("#note-title-input")?.addEventListener("paste", handleNoteCreatorPaste);
+  $("#note-content-input")?.addEventListener("paste", handleNoteCreatorPaste);
 }
 
 function expandNoteCreator() {
@@ -2925,6 +3021,47 @@ window.openEditNoteModal = function(noteId) {
     </div>
   `;
   document.body.appendChild(modal);
+  
+  const editTitle = $("#edit-note-title");
+  const editContent = $("#edit-note-content");
+  
+  const handleEditModalPaste = async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.indexOf("image") !== -1) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          try {
+            const compressed = await compressImage(file);
+            window.currentEditNote.image = compressed;
+            
+            let preview = $("#edit-note-image-preview");
+            if (!preview) {
+              preview = document.createElement("div");
+              preview.className = "note-creator-image-preview";
+              preview.id = "edit-note-image-preview";
+              preview.innerHTML = `
+                <img src="${compressed}" alt="Note image">
+                <button type="button" class="remove-img-btn" onclick="removeEditNoteImage()">&times;</button>
+              `;
+              const txt = $("#edit-note-content");
+              txt.parentNode.insertBefore(preview, txt.nextSibling);
+            } else {
+              preview.querySelector("img").src = compressed;
+            }
+          } catch (err) {
+            console.error(err);
+            toast("Image compression failed", "error");
+          }
+        }
+      }
+    }
+  };
+  
+  editTitle?.addEventListener("paste", handleEditModalPaste);
+  editContent?.addEventListener("paste", handleEditModalPaste);
   
   window.currentEditNote = {
     id: note.id,
