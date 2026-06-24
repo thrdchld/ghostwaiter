@@ -403,6 +403,7 @@ async function initialize() {
   initNotesSystem();
   showView(lastView);
   await loadWorkspaces();
+  runBackgroundNoteSync();
   if (lastView === "notes") loadNotes();
   await Promise.all([loadSyncStatus(), syncAIConfigFromSupabase()]);
   restoreLocalDraft();
@@ -541,6 +542,7 @@ async function switchWorkspace(id) {
   restoreLocalDraft();
   closeSheet();
   await Promise.all([loadBrain(), loadSyncStatus()]);
+  runBackgroundNoteSync();
   if (localStorage.getItem("ghostwaiter:activeView") === "notes") {
     loadNotes();
   }
@@ -810,7 +812,7 @@ function appendMessage(role, content = "", attachments = null) {
         <div class="msg-content">${contentHtml}</div>
         ${attachmentsHtml}
       </div>
-      <div class="message-actions">
+      <div class="message-actions" ${isThinking ? 'style="display: none;"' : ''}>
         <button class="message-action-btn copy-btn" type="button" onclick="copyMessageText(this)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           Copy
@@ -955,6 +957,8 @@ async function sendChat(event) {
       const msgBubble = assistant.querySelector(".message");
       if (msgBubble && msgBubble.classList.contains("thinking")) {
         msgBubble.classList.remove("thinking");
+        const actions = assistant.querySelector(".message-actions");
+        if (actions) actions.style.display = "";
       }
       assistant.querySelector(".msg-content").innerHTML = renderMarkdown(fullResponse);
       
@@ -1813,7 +1817,6 @@ function bindEvents() {
     modelsBrowser?.classList.add("hidden");
     allModels = [];
     updateModelIndicator();
-    saveAIConfigToSupabase();
   });
 
   apiKeyInput?.addEventListener("input", () => {
@@ -1821,10 +1824,6 @@ function bindEvents() {
     localStorage.setItem(`ghostwaiter:key_${p}`, apiKeyInput.value.trim());
     if (p === "openrouter") localStorage.setItem("ghostwaiter:openrouter_key", apiKeyInput.value.trim());
     updateModelIndicator();
-  });
-
-  apiKeyInput?.addEventListener("change", () => {
-    saveAIConfigToSupabase();
   });
 
   function renderModels() {
@@ -1848,7 +1847,6 @@ function bindEvents() {
         orModelDisplay.textContent = model.id;
         updateModelIndicator();
         toast(`Model selected: ${model.id}`, "success");
-        saveAIConfigToSupabase();
       };
       modelsList.appendChild(el);
     });
@@ -2085,6 +2083,24 @@ function bindEvents() {
   };
 
   if ($("#ai-settings-close")) $("#ai-settings-close").onclick = closeAIModalWithCheck;
+
+  if ($("#ai-settings-save")) {
+    $("#ai-settings-save").onclick = async () => {
+      await saveAIConfigToSupabase();
+      initialProvider = localStorage.getItem("ghostwaiter:ai_provider") || "openrouter";
+      initialModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
+      initialKeys = {
+        openrouter: localStorage.getItem("ghostwaiter:key_openrouter") || localStorage.getItem("ghostwaiter:openrouter_key") || "",
+        google: localStorage.getItem("ghostwaiter:key_google") || "",
+        groq: localStorage.getItem("ghostwaiter:key_groq") || "",
+        deepseek: localStorage.getItem("ghostwaiter:key_deepseek") || "",
+        mistral: localStorage.getItem("ghostwaiter:key_mistral") || "",
+        kilo: localStorage.getItem("ghostwaiter:key_kilo") || "",
+      };
+      $("#ai-modal").classList.add("hidden");
+      toast("AI settings saved", "success");
+    };
+  }
 
   // Backdrop click-outside-to-close handlers
   const dataModal = $("#data-modal");
@@ -2458,17 +2474,139 @@ function compressImage(file, maxSizeBytes = 128 * 1024) {
 }
 
 // Notes list loader
+let noteSyncTimer = null;
+
+function getNotesSyncQueue() {
+  try {
+    return JSON.parse(localStorage.getItem(`ghostwaiter:notes_sync_queue_${state.workspace}`) || "[]");
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveNotesSyncQueue(queue) {
+  localStorage.setItem(`ghostwaiter:notes_sync_queue_${state.workspace}`, JSON.stringify(queue));
+}
+
+function sortStateNotes() {
+  state.notes.sort((a, b) => {
+    const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
+    const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
+    return timeB - timeA;
+  });
+}
+
+function enqueueNoteSync(action, payload) {
+  const queue = getNotesSyncQueue();
+  queue.push({ action, payload, timestamp: Date.now() });
+  saveNotesSyncQueue(queue);
+  
+  const spinner = $("#notes-loading-spinner");
+  if (spinner) spinner.classList.remove("hidden");
+
+  clearTimeout(noteSyncTimer);
+  noteSyncTimer = setTimeout(runBackgroundNoteSync, 2000);
+}
+
+async function runBackgroundNoteSync() {
+  if (!state.workspace) return;
+  const queue = getNotesSyncQueue();
+  if (queue.length === 0) {
+    const spinner = $("#notes-loading-spinner");
+    if (spinner) spinner.classList.add("hidden");
+    return;
+  }
+  
+  const spinner = $("#notes-loading-spinner");
+  if (spinner) spinner.classList.remove("hidden");
+  
+  const item = queue[0];
+  try {
+    let url = "";
+    let body = {};
+    if (item.action === "save") {
+      url = "/api/notes/save";
+      body = {
+        workspace_id: state.workspace,
+        id: item.payload.id,
+        title: item.payload.title,
+        content: item.payload.content,
+        pinned: item.payload.pinned,
+        tags: item.payload.tags,
+        image: item.payload.image
+      };
+    } else if (item.action === "delete") {
+      url = "/api/notes/delete";
+      body = {
+        workspace_id: state.workspace,
+        note_id: item.payload.note_id
+      };
+    } else if (item.action === "delete-bulk") {
+      url = "/api/notes/delete-bulk";
+      body = {
+        workspace_id: state.workspace,
+        note_ids: item.payload.note_ids
+      };
+    }
+    
+    await jsonApi(url, {
+      method: "POST",
+      body: body
+    });
+    
+    const updatedQueue = getNotesSyncQueue();
+    const idx = updatedQueue.findIndex(q => q.timestamp === item.timestamp && q.action === item.action);
+    if (idx !== -1) {
+      updatedQueue.splice(idx, 1);
+      saveNotesSyncQueue(updatedQueue);
+    }
+    
+    setTimeout(runBackgroundNoteSync, 100);
+  } catch (err) {
+    console.error("Notes background sync error:", err);
+    if (err.status && err.status >= 400 && err.status < 500) {
+      const updatedQueue = getNotesSyncQueue();
+      const idx = updatedQueue.findIndex(q => q.timestamp === item.timestamp && q.action === item.action);
+      if (idx !== -1) {
+        updatedQueue.splice(idx, 1);
+        saveNotesSyncQueue(updatedQueue);
+      }
+      setTimeout(runBackgroundNoteSync, 100);
+    } else {
+      clearTimeout(noteSyncTimer);
+      noteSyncTimer = setTimeout(runBackgroundNoteSync, 5000);
+    }
+  }
+}
+
 async function loadNotes() {
   if (!state.workspace) return;
+  
+  const cached = localStorage.getItem(`ghostwaiter:notes_${state.workspace}`);
+  if (cached) {
+    try {
+      state.notes = JSON.parse(cached);
+      renderNotes();
+    } catch (e) {
+      console.error("Failed to parse cached notes", e);
+    }
+  }
+  
+  if (getNotesSyncQueue().length > 0) {
+    return;
+  }
+  
   const spinner = $("#notes-loading-spinner");
   if (spinner) spinner.classList.remove("hidden");
   try {
     const res = await jsonApi(`/api/notes/list?workspace_id=${state.workspace}&query=${encodeURIComponent(state.notesSearch || '')}&tag=${encodeURIComponent(state.notesActiveTag || '')}`);
-    state.notes = res.items || [];
-    renderNotes();
+    if (getNotesSyncQueue().length === 0) {
+      state.notes = res.items || [];
+      localStorage.setItem(`ghostwaiter:notes_${state.workspace}`, JSON.stringify(state.notes));
+      renderNotes();
+    }
   } catch (err) {
     console.error("Error loading notes", err);
-    toast("Failed to load notes", "error");
   } finally {
     if (spinner) spinner.classList.add("hidden");
   }
@@ -2713,34 +2851,27 @@ async function saveCurrentNoteFromCreator() {
   
   const tags = tagsStr ? tagsStr.split(",").map(t => t.trim()).filter(t => t.length > 0) : [];
   
-  const payload = {
-    workspace_id: state.workspace,
+  const noteId = "note_" + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+  const noteObj = {
+    id: noteId,
     title,
     content,
     pinned: creatorPinned,
     tags,
-    image: creatorImage
+    image: creatorImage,
+    workspace_id: state.workspace,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   };
   
-  // Collapse creator immediately in UI
+  state.notes.unshift(noteObj);
+  localStorage.setItem(`ghostwaiter:notes_${state.workspace}`, JSON.stringify(state.notes));
+  sortStateNotes();
+  renderNotes();
   collapseNoteCreator();
   
-  const spinner = $("#notes-loading-spinner");
-  if (spinner) spinner.classList.remove("hidden");
-  
-  try {
-    await jsonApi("/api/notes/save", {
-      method: "POST",
-      body: payload
-    });
-    toast("Note saved", "success");
-    await loadNotes();
-  } catch (err) {
-    console.error(err);
-    toast("Failed to save note", "error");
-  } finally {
-    if (spinner) spinner.classList.add("hidden");
-  }
+  enqueueNoteSync("save", noteObj);
+  toast("Note saved", "success");
 }
 
 // Edit note modal
@@ -2881,22 +3012,12 @@ window.deleteNoteDirect = async function(noteId) {
     window.currentEditNote = null;
   }
   
-  const spinner = $("#notes-loading-spinner");
-  if (spinner) spinner.classList.remove("hidden");
+  state.notes = state.notes.filter(n => n.id !== noteId);
+  localStorage.setItem(`ghostwaiter:notes_${state.workspace}`, JSON.stringify(state.notes));
+  renderNotes();
   
-  try {
-    await jsonApi("/api/notes/delete", {
-      method: "POST",
-      body: { workspace_id: state.workspace, note_id: noteId }
-    });
-    toast("Note deleted", "success");
-    await loadNotes();
-  } catch (err) {
-    console.error(err);
-    toast("Failed to delete note", "error");
-  } finally {
-    if (spinner) spinner.classList.add("hidden");
-  }
+  enqueueNoteSync("delete", { note_id: noteId });
+  toast("Note deleted", "success");
 };
 
 window.closeEditNoteModal = async function(save = true) {
@@ -2925,7 +3046,9 @@ window.closeEditNoteModal = async function(save = true) {
         content,
         pinned: window.currentEditNote.pinned,
         tags,
-        image: window.currentEditNote.image
+        image: window.currentEditNote.image,
+        created_at: original.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
     }
   }
@@ -2935,20 +3058,18 @@ window.closeEditNoteModal = async function(save = true) {
   window.currentEditNoteOriginal = null;
   
   if (payload) {
-    const spinner = $("#notes-loading-spinner");
-    if (spinner) spinner.classList.remove("hidden");
-    try {
-      await jsonApi("/api/notes/save", {
-        method: "POST",
-        body: payload
-      });
-      await loadNotes();
-    } catch (err) {
-      console.error(err);
-      toast("Failed to save note changes", "error");
-    } finally {
-      if (spinner) spinner.classList.add("hidden");
+    const idx = state.notes.findIndex(n => n.id === payload.id);
+    if (idx !== -1) {
+      state.notes[idx] = { ...state.notes[idx], ...payload };
+    } else {
+      state.notes.unshift(payload);
     }
+    localStorage.setItem(`ghostwaiter:notes_${state.workspace}`, JSON.stringify(state.notes));
+    sortStateNotes();
+    renderNotes();
+    
+    enqueueNoteSync("save", payload);
+    toast("Note saved", "success");
   }
 };
 
@@ -2960,31 +3081,11 @@ window.toggleNotePin = async function(noteId) {
   note.pinned = !note.pinned;
   note.updated_at = new Date().toISOString();
   
+  localStorage.setItem(`ghostwaiter:notes_${state.workspace}`, JSON.stringify(state.notes));
+  sortStateNotes();
   renderNotes();
   
-  const spinner = $("#notes-loading-spinner");
-  if (spinner) spinner.classList.remove("hidden");
-  
-  try {
-    await jsonApi("/api/notes/save", {
-      method: "POST",
-      body: {
-        workspace_id: state.workspace,
-        id: note.id,
-        title: note.title,
-        content: note.content,
-        pinned: note.pinned,
-        tags: note.tags,
-        image: note.image
-      }
-    });
-    await loadNotes();
-  } catch (err) {
-    console.error(err);
-    toast("Failed to update note pin", "error");
-  } finally {
-    if (spinner) spinner.classList.add("hidden");
-  }
+  enqueueNoteSync("save", note);
 };
 
 // Note Selection & Bulk Action handlers
@@ -3064,24 +3165,19 @@ window.notesDeselectAll = function() {
 
 window.notesBulkDelete = async function() {
   if (state.notesSelected.size === 0) return;
-  if (!(await showConfirm(`Delete ${state.notesSelected.size} selected note(s)?`))) return;
+  const count = state.notesSelected.size;
+  if (!(await showConfirm(`Delete ${count} selected note(s)?`))) return;
   
-  try {
-    await jsonApi("/api/notes/delete-bulk", {
-      method: "POST",
-      body: {
-        workspace_id: state.workspace,
-        note_ids: Array.from(state.notesSelected)
-      }
-    });
-    toast("Notes deleted", "success");
-    state.notesSelected.clear();
-    updateBulkActionsBar();
-    loadNotes();
-  } catch (err) {
-    console.error(err);
-    toast("Failed to delete notes", "error");
-  }
+  const noteIds = Array.from(state.notesSelected);
+  
+  state.notes = state.notes.filter(n => !state.notesSelected.has(n.id));
+  state.notesSelected.clear();
+  localStorage.setItem(`ghostwaiter:notes_${state.workspace}`, JSON.stringify(state.notes));
+  updateBulkActionsBar();
+  renderNotes();
+  
+  enqueueNoteSync("delete-bulk", { note_ids: noteIds });
+  toast("Notes deleted", "success");
 };
 
 // Tag filter chips rendering

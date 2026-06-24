@@ -1005,7 +1005,7 @@ tbody tr:hover {
 }
 
 /* Streaming cursor */
-.message.assistant.generating .msg-content > :last-child::after {
+.message.assistant.generating:not(.thinking) .msg-content > :last-child::after {
   content: '▊';
   display: inline-block;
   vertical-align: middle;
@@ -2080,6 +2080,25 @@ details.accordion-clean summary::-webkit-details-marker {
   border-color: transparent !important;
   box-shadow: none !important;
   outline: 0 !important;
+}
+
+/* Fix inner border and text clipping in notes search input */
+#notes-search-input,
+.notes-search-bar input {
+  border: 0 !important;
+  border-style: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  margin: 0 0 0 6px !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  border-radius: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  line-height: 1.5 !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
 }
 
 /* Note Creator */
