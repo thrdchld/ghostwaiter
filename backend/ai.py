@@ -31,6 +31,15 @@ class AIService:
     def _endpoint(self, provider: str) -> str:
         if not provider or provider == "default":
             return settings.ai_base_url
+        if provider.startswith("custom|"):
+            parts = provider.split("|", 1)
+            custom_url = parts[1].strip()
+            if not custom_url.endswith("/chat/completions"):
+                if custom_url.endswith("/"):
+                    custom_url += "chat/completions"
+                else:
+                    custom_url += "/chat/completions"
+            return custom_url
         return PROVIDER_ENDPOINTS.get(provider, settings.ai_base_url)
 
     def _headers(self, provider: str, api_key: str) -> dict[str, str]:
@@ -258,6 +267,16 @@ class AIService:
         elif provider == "kilo":
             url = "https://api.kilo.ai/v1/models"
             headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider.startswith("custom|"):
+            parts = provider.split("|", 1)
+            custom_url = parts[1].strip()
+            if custom_url.endswith("/"):
+                url = f"{custom_url}models"
+            else:
+                url = f"{custom_url}/models"
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
         else:
             return False, f"Unknown provider: {provider}"
 

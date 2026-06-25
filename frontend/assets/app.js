@@ -91,7 +91,12 @@ async function api(path, options = {}) {
   const provider = localStorage.getItem("ghostwaiter:ai_provider") || "openrouter";
   const key = localStorage.getItem(`ghostwaiter:key_${provider}`) || localStorage.getItem("ghostwaiter:openrouter_key") || "";
   const model = localStorage.getItem("ghostwaiter:openrouter_model") || "";
-  config.headers["X-AI-Provider"] = provider;
+  if (provider === "custom") {
+    const customEndpoint = localStorage.getItem("ghostwaiter:custom_endpoint") || "";
+    config.headers["X-AI-Provider"] = `custom|${customEndpoint}`;
+  } else {
+    config.headers["X-AI-Provider"] = provider;
+  }
   if (key) config.headers["X-OpenRouter-Key"] = key;
   if (model) config.headers["X-OpenRouter-Model"] = model;
 
