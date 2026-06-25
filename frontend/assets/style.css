@@ -2646,3 +2646,314 @@ pre,
   }
 }
 
+/* ─── Mobile-First Design Overhaul ─────────────────────────────────────── */
+
+/* Bottom Navigation Bar for Mobile - Primary navigation pattern */
+@media (max-width: 780px) {
+  /* Hide traditional sidebar completely on mobile */
+  #sidebar {
+    display: none !important;
+  }
+
+  /* Remove left-sidebar spacing */
+  #sidebar-backdrop {
+    display: none !important;
+  }
+
+  /* App shell takes full width */
+  .app-shell {
+    flex-direction: column;
+  }
+
+  /* Main wrapper takes full height minus bottom nav */
+  .main-wrapper {
+    padding-top: calc(56px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* Topbar compact on mobile */
+  .topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    height: 56px;
+    padding: 0 16px;
+    padding-top: env(safe-area-inset-top, 0px);
+    height: calc(56px + env(safe-area-inset-top, 0px));
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+  }
+
+  /* Hide mobile sidebar toggle - we use bottom nav now */
+  #mobile-sidebar-toggle {
+    display: none !important;
+  }
+
+  /* Workspace button more compact */
+  .workspace-button {
+    min-height: 40px;
+    padding: 6px 10px;
+  }
+  .workspace-button .eyebrow {
+    font-size: 9px;
+  }
+  .workspace-button strong {
+    font-size: 13px;
+  }
+
+  /* Status cluster smaller */
+  .status-cluster {
+    gap: 6px;
+  }
+  .status-pill {
+    min-height: 40px;
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+  .sync-button {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Bottom Navigation Bar */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(68px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-around;
+    z-index: 100;
+    padding-top: 8px;
+  }
+
+  .bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: none;
+    border: 0;
+    color: var(--text-tertiary);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 6px 8px;
+    border-radius: 12px;
+    min-width: 56px;
+    min-height: 48px;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+    text-transform: uppercase;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .bottom-nav-item svg {
+    width: 22px;
+    height: 22px;
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .bottom-nav-item:active svg {
+    transform: scale(0.88);
+  }
+
+  .bottom-nav-item.active {
+    color: var(--text-primary);
+  }
+
+  .bottom-nav-item.active svg {
+    stroke-width: 2.5;
+  }
+
+  .bottom-nav-item span.nav-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    margin-top: -2px;
+  }
+
+  .bottom-nav-item.active span.nav-dot {
+    opacity: 1;
+  }
+
+  /* Main content full width, no padding */
+  .main {
+    padding: 0;
+    max-width: 100%;
+  }
+
+  /* Chat view padding */
+  .chat-messages {
+    padding: 16px 16px 120px;
+  }
+
+  /* Section padding */
+  .view {
+    padding: 20px 16px;
+  }
+
+  /* Section headings smaller */
+  .section-heading h1 {
+    font-size: 26px;
+  }
+
+  /* Composer stays above bottom nav */
+  .composer-container {
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-bottom: env(safe-area-inset-bottom, 12px);
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .composer-form {
+    border-radius: 20px;
+    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.08), var(--shadow-lg);
+  }
+
+  /* Scroll button above bottom nav */
+  .scroll-bottom-btn {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    right: 16px;
+  }
+
+  /* Messages max width */
+  .message {
+    max-width: 88%;
+  }
+
+  /* Note cards on mobile: always show actions */
+  .note-card-actions {
+    opacity: 1;
+  }
+
+  .note-card-pin-btn {
+    opacity: 1;
+  }
+
+  /* Notes grid single column on small screens */
+  .notes-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  /* Brain stats 2-column */
+  .brain-stats {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  }
+
+  /* Chips wrap better */
+  .tab-row {
+    margin: 0 0 20px;
+    padding: 0;
+  }
+
+  /* Sheet full-screen on mobile */
+  .sheet {
+    border-radius: 22px 22px 0 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 92dvh;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Dialog cards full width */
+  .dialog-card {
+    width: 95%;
+    padding: 20px;
+  }
+
+  /* Toast above bottom nav */
+  .toast {
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Settings: taller rows for finger tap */
+  .setting-row {
+    min-height: 72px;
+    padding: 18px 20px;
+  }
+
+  /* Disable hover tooltips on mobile (already handled by media query but be explicit) */
+  [data-tooltip]::after {
+    display: none !important;
+  }
+
+  /* Empty state bottom padding so it's centered above composer */
+  .empty-state {
+    padding-bottom: 80px;
+  }
+
+  /* Chat heading smaller */
+  #view-chat .section-heading {
+    padding: 14px 16px 10px;
+  }
+}
+
+/* ─── Desktop Refinements ──────────────────────────────────────────────── */
+@media (min-width: 781px) {
+  /* Hide bottom nav on desktop */
+  .bottom-nav {
+    display: none !important;
+  }
+
+  /* More padding for wide content */
+  .main {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  /* Sheet desktop style */
+  .sheet {
+    border-radius: var(--radius-lg);
+    bottom: 32px;
+    left: 50%;
+    max-width: 620px;
+    right: auto;
+    transform: translateX(-50%);
+    width: calc(100% - 40px);
+  }
+
+  /* Note card actions show on hover only on desktop */
+  .note-card-actions {
+    opacity: 0;
+  }
+  .note-card:hover .note-card-actions {
+    opacity: 1;
+  }
+
+  /* Note card pin button show on hover only on desktop */
+  .note-card-pin-btn {
+    opacity: 0;
+  }
+  .note-card:hover .note-card-pin-btn,
+  .note-card-pin-btn.active {
+    opacity: 1;
+  }
+}
+
+/* ─── Fade-in animation for empty state text ────────────────────────────── */
+@keyframes emptyStatePulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+.empty-state strong {
+  animation: emptyStatePulse 3s ease-in-out infinite;
+}

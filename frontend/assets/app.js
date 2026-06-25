@@ -463,6 +463,8 @@ function closeSheet() {
 function showView(view) {
   $$(".view").forEach(node => node.classList.toggle("active", node.id === `view-${view}`));
   $$(".nav-item").forEach(node => node.classList.toggle("active", node.dataset.view === view));
+  // Sync mobile bottom nav
+  $$(".bottom-nav-item").forEach(node => node.classList.toggle("active", node.dataset.view === view));
   localStorage.setItem("ghostwaiter:activeView", view);
   if (view === "brain") loadBrain();
   if (view === "notes") loadNotes();
@@ -1019,7 +1021,13 @@ async function sendChat(event) {
   };
   
   // Add user message to display
-  appendMessage("user", message, state.attachments);
+  const userBubble = appendMessage("user", message, state.attachments);
+  // Scroll user bubble into view (top of visible area)
+  if (userBubble) {
+    setTimeout(() => {
+      userBubble.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 30);
+  }
   
   // Clear input composer and draft
   input.value = "";
@@ -1763,6 +1771,8 @@ function bindEvents() {
 
   // ── Sidebar toggle (mobile backdrop blocks all background interaction) ─
   $$(".nav-item").forEach(button => button.onclick = () => { showView(button.dataset.view); if (window.innerWidth <= 780) toggleSidebar(); });
+  // ── Mobile Bottom Navigation ──────────────────────────────────────────
+  $$(".bottom-nav-item").forEach(button => button.onclick = () => { showView(button.dataset.view); });
   if ($("#sidebar-toggle")) $("#sidebar-toggle").onclick = toggleSidebar;
   if ($("#mobile-sidebar-toggle")) $("#mobile-sidebar-toggle").onclick = toggleSidebar;
   if ($("#sidebar-backdrop")) {
@@ -1909,6 +1919,7 @@ function bindEvents() {
   const modelSearch      = $("#model-search");
 
   let allModels = [];
+  let pendingModel = null; // selected but not yet saved
 
   // Restore saved state
   const savedProvider = localStorage.getItem("ghostwaiter:ai_provider") || "openrouter";
@@ -1999,18 +2010,18 @@ function bindEvents() {
       modelsList.innerHTML = `<p style="font-size:13px;opacity:.6;padding:8px 0;">No models match.</p>`;
       return;
     }
-    const currentActiveModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
+    const savedActiveModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
     filtered.forEach(model => {
       const el = document.createElement("div");
-      el.className = "model-result" + (model.id === currentActiveModel ? " active" : "");
+      const isPending = pendingModel === model.id;
+      const isSaved = !pendingModel && model.id === savedActiveModel;
+      el.className = "model-result" + (isPending || isSaved ? " active" : "");
       el.style.cursor = "pointer";
-      el.innerHTML = `<strong>${model.name}</strong><small>${model.id}</small>`;
+      el.innerHTML = `<strong>${model.name}</strong><small>${model.id}</small>${isPending ? '<span style="font-size:11px;color:#f59e0b;font-weight:700;margin-top:4px;display:block;">● Pending save</span>' : (isSaved ? '<span style="font-size:11px;color:#22c55e;font-weight:700;margin-top:4px;display:block;">● Active</span>' : '')}`;
       el.onclick = () => {
-        localStorage.setItem("ghostwaiter:openrouter_model", model.id);
-        orModelDisplay.textContent = model.id;
-        updateModelIndicator();
+        pendingModel = model.id;
+        if (orModelDisplay) orModelDisplay.textContent = model.id + " (unsaved)";
         renderModels();
-        toast(`Model selected: ${model.id}`, "success");
       };
       modelsList.appendChild(el);
     });
@@ -2024,7 +2035,7 @@ function bindEvents() {
     if (provider !== "custom" && !key) return toast("Enter your API Key first", "error");
 
     loadModelsBtn.disabled = true;
-    loadModelsBtn.textContent = "Memuat...";
+    loadModelsBtn.textContent = "Loading...";
     try {
       const fetcher = PROVIDER_MODEL_URLS[provider];
       if (!fetcher) throw new Error("Provider not supported");
@@ -2036,7 +2047,7 @@ function bindEvents() {
       toast(`Failed to load models: ${err.message}`, "error");
     } finally {
       loadModelsBtn.disabled = false;
-      loadModelsBtn.textContent = "Muat";
+      loadModelsBtn.textContent = "Load";
     }
   };
 
@@ -2271,6 +2282,14 @@ function bindEvents() {
 
   if ($("#ai-settings-save")) {
     $("#ai-settings-save").onclick = async () => {
+      // Commit pending model selection to localStorage before saving
+      if (pendingModel) {
+        localStorage.setItem("ghostwaiter:openrouter_model", pendingModel);
+        if (orModelDisplay) orModelDisplay.textContent = pendingModel;
+        pendingModel = null;
+        updateModelIndicator();
+        renderModels();
+      }
       await saveAIConfigToSupabase();
       initialProvider = localStorage.getItem("ghostwaiter:ai_provider") || "openrouter";
       initialModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
