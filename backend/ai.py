@@ -19,6 +19,40 @@ PROVIDER_ENDPOINTS = {
     "kilo":       "https://api.kilo.ai/v1/chat/completions",
 }
 
+ANTHROPIC_MODELS = [
+    "claude-3-5-sonnet-latest",
+    "claude-3-5-haiku-latest",
+    "claude-3-opus-latest",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
+    "claude-3-opus-20240229",
+]
+
+
+def _parse_custom_provider(provider: str) -> tuple[str, str]:
+    parts = provider.split("|", 2)
+    if len(parts) >= 3:
+        return parts[1].strip(), parts[2].strip()
+    return "openai", parts[1].strip()
+
+
+def _parse_models_payload(data: Any) -> list[str]:
+    models: list[str] = []
+    if not isinstance(data, dict):
+        return models
+    for key in ("data", "models"):
+        items = data.get(key)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if isinstance(item, str):
+                models.append(item)
+            elif isinstance(item, dict):
+                model_id = item.get("id") or item.get("name") or item.get("model")
+                if model_id:
+                    models.append(str(model_id))
+    return sorted({item for item in models if item})
+
 
 def to_anthropic_payload(model: str, messages: list[dict[str, str]], stream: bool = False, max_tokens: int = 1024) -> dict[str, Any]:
     system_parts = []
@@ -430,6 +464,69 @@ class AIService:
                     return False, f"HTTP {res.status_code}"
         except Exception as e:
             return False, f"Connection error: {e}"
+
+    async def list_models(self, api_key: str, provider: str) -> list[str]:
+        is_ollama = provider.startswith("custom|") and _parse_custom_provider(provider)[0] == "ollama"
+        if not api_key and not is_ollama:
+            if provider in ("default", "", None):
+                api_key = settings.supabase_key or "dummy"
+            else:
+                raise AIUnavailable(f"API key for {provider} is not configured")
+
+        if provider.startswith("custom|"):
+            api_type, custom_url = _parse_custom_provider(provider)
+            if api_type == "anthropic":
+                return list(ANTHROPIC_MODELS)
+            if api_type == "google":
+                url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+                headers: dict[str, str] = {}
+            elif api_type == "ollama":
+                if "/v1" in custom_url:
+                    url = f"{custom_url.rstrip('/')}/models"
+                else:
+                    url = f"{custom_url.rstrip('/')}/api/tags"
+                headers = {}
+            else:
+                url = f"{custom_url.rstrip('/')}/models"
+                headers = {}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+        elif provider in ("default", "", None):
+            url = f"{settings.ai_base_url}/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider == "google":
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+            headers = {}
+        elif provider == "openrouter":
+            url = "https://openrouter.ai/api/v1/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider == "groq":
+            url = "https://api.groq.com/openai/v1/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider == "deepseek":
+            url = "https://api.deepseek.com/v1/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider == "mistral":
+            url = "https://api.mistral.ai/v1/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        elif provider == "kilo":
+            url = "https://api.kilo.ai/v1/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+        else:
+            raise AIUnavailable(f"Unknown provider: {provider}")
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                models = _parse_models_payload(response.json())
+                if not models:
+                    raise AIUnavailable("No models returned by provider")
+                return models
+        except AIUnavailable:
+            raise
+        except Exception as exc:
+            raise AIUnavailable(f"Failed to list models ({provider}): {exc}") from exc
 
 
 ai_service = AIService()

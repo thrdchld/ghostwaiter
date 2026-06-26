@@ -1538,6 +1538,16 @@ async def test_ai_connection(request: Request) -> dict[str, Any]:
     return {"connected": connected, "message": message}
 
 
+@app.post("/api/ai/list-models", dependencies=[Depends(require_auth)])
+async def list_ai_models(request: Request) -> dict[str, Any]:
+    api_key, _model, provider = get_or_auth(request)
+    try:
+        models = await ai_service.list_models(api_key, provider)
+    except AIUnavailable as exc:
+        raise error(str(exc), 400) from exc
+    return {"models": models}
+
+
 @app.post("/api/snapshot/create", dependencies=[Depends(require_auth)])
 def create_snapshot() -> dict[str, Any]:
     return store.create_snapshot()

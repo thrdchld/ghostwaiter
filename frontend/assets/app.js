@@ -152,6 +152,39 @@ function setTooltip(el, text) {
   }
 }
 
+function getActiveAIModel() {
+  return localStorage.getItem("ghostwaiter:openrouter_model") || "";
+}
+
+function ensureAIModelConfigured() {
+  const model = getActiveAIModel();
+  if (!model) {
+    toast("Select an AI model in Settings first", "error");
+    return false;
+  }
+  const provider = localStorage.getItem("ghostwaiter:ai_provider") || "custom";
+  if (provider === "custom") {
+    const activeId = localStorage.getItem("ghostwaiter:custom_active_id") || "";
+    const endpoint = localStorage.getItem("ghostwaiter:custom_endpoint") || "";
+    if (!activeId || !endpoint) {
+      toast("Configure an AI provider in Settings first", "error");
+      return false;
+    }
+  }
+  return true;
+}
+
+function applyActiveModel(modelId, { persist = true } = {}) {
+  if (!modelId) return;
+  localStorage.setItem("ghostwaiter:openrouter_model", modelId);
+  const orModelDisplay = $("#active-model-display");
+  if (orModelDisplay) orModelDisplay.textContent = modelId;
+  updateModelIndicator();
+  if (persist) {
+    saveAIConfigToSupabase().catch(err => console.error("Failed to save AI model:", err));
+  }
+}
+
 function updateModelIndicator() {
   const provider = localStorage.getItem("ghostwaiter:ai_provider") || "custom";
   const key = localStorage.getItem(`ghostwaiter:key_${provider}`) || localStorage.getItem("ghostwaiter:openrouter_key") || "";
@@ -426,6 +459,8 @@ async function syncAIConfigFromSupabase() {
               }
             } else if (providerKey === "custom_api_type") {
               localStorage.setItem("ghostwaiter:custom_api_type", val);
+            } else if (providerKey === "custom_active_id") {
+              localStorage.setItem("ghostwaiter:custom_active_id", val);
             } else if (providerKey === "custom") {
               localStorage.setItem("ghostwaiter:key_custom", val);
             }
@@ -440,6 +475,10 @@ async function syncAIConfigFromSupabase() {
       
       renderCustomProviders();
       populateProvidersDropdown();
+      const activeId = config.keys?.custom_active_id;
+      if (activeId) {
+        selectCustomProvider(activeId);
+      }
       updateModelIndicator();
     }
   } catch (err) {
@@ -455,6 +494,7 @@ async function saveAIConfigToSupabase() {
     custom_endpoint: localStorage.getItem("ghostwaiter:custom_endpoint") || "",
     custom_api_type: localStorage.getItem("ghostwaiter:custom_api_type") || "openai",
     custom_providers: localStorage.getItem("ghostwaiter:custom_providers") || "[]",
+    custom_active_id: localStorage.getItem("ghostwaiter:custom_active_id") || "",
   };
   
   try {
@@ -1190,6 +1230,7 @@ async function sendChat(event) {
   }
   
   if (!message && state.attachments.length === 0) return;
+  if (!ensureAIModelConfigured()) return;
   
   // Hide error container
   const errorContainer = $("#chat-error-container");
@@ -1459,6 +1500,7 @@ async function generateWriting() {
   }
   const prompt = $("#write-prompt").value.trim();
   if (!prompt) return toast("Write instructions first");
+  if (!ensureAIModelConfigured()) return;
   const button = $("#generate-button");
   button.textContent = "Stop";
   $("#draft-content").value = "";
@@ -2045,7 +2087,6 @@ function bindEvents() {
   const modelSearch      = $("#model-search");
 
   let allModels = [];
-  let pendingModel = null; // selected but not yet saved
 
   // Populate Tab 1 provider selectors dynamically from custom providers list
   window.populateProvidersDropdown = function() {
@@ -2153,56 +2194,19 @@ function bindEvents() {
     }
 
     try {
-      // 1. Verify connection first
-      const res = await jsonApi("/api/ai/test-connection", {
+      const res = await jsonApi("/api/ai/list-models", {
         method: "POST",
         headers: {
           "X-AI-Provider": `custom|${p.type || "openai"}|${p.endpoint}`,
           "X-OpenRouter-Key": p.key || ""
         }
       });
-      
-      if (!res.connected) {
-        throw new Error(res.message || "Connection failed");
+
+      const models = Array.isArray(res.models) ? res.models : [];
+      if (!models.length) {
+        throw new Error("No models returned by provider");
       }
-      
-      // 2. Fetch models dynamically
-      let models = [];
-      if (p.type === "anthropic") {
-        models = [
-          "claude-3-5-sonnet-latest",
-          "claude-3-5-haiku-latest",
-          "claude-3-opus-latest",
-          "claude-3-5-sonnet-20241022",
-          "claude-3-5-haiku-20241022",
-          "claude-3-opus-20240229"
-        ];
-      } else {
-        try {
-          const url = p.endpoint.endsWith("/") ? `${p.endpoint}models` : `${p.endpoint}/models`;
-          const headers = {};
-          if (p.key) headers["Authorization"] = `Bearer ${p.key}`;
-          const modelsRes = await fetch(url, { headers });
-          if (modelsRes.ok) {
-             const modelsData = await modelsRes.json();
-             models = (modelsData.data || []).map(m => m.id);
-          } else {
-             throw new Error(`HTTP ${modelsRes.status}`);
-          }
-        } catch (e) {
-          console.warn("Failed to fetch models directly, using fallback list", e);
-        }
-        
-        if (models.length === 0) {
-          models = [
-            "gpt-4o",
-            "gpt-4o-mini",
-            "o1-preview",
-            "o1-mini"
-          ];
-        }
-      }
-      
+
       allModels = models.map(m => ({ id: m, name: m }));
       renderModels();
       
@@ -2294,15 +2298,14 @@ function bindEvents() {
     const savedActiveModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
     filtered.forEach(model => {
       const el = document.createElement("div");
-      const isPending = pendingModel === model.id;
-      const isSaved = !pendingModel && model.id === savedActiveModel;
-      el.className = "model-result" + (isPending || isSaved ? " active" : "");
+      const isActive = model.id === savedActiveModel;
+      el.className = "model-result" + (isActive ? " active" : "");
       el.style.cursor = "pointer";
-      el.innerHTML = `<strong>${model.name}</strong><small>${model.id}</small>${isPending ? '<span style="font-size:11px;color:#f59e0b;font-weight:700;margin-top:4px;display:block;">● Pending save</span>' : (isSaved ? '<span style="font-size:11px;color:#22c55e;font-weight:700;margin-top:4px;display:block;">● Active</span>' : '')}`;
+      el.innerHTML = `<strong>${model.name}</strong><small>${model.id}</small>${isActive ? '<span style="font-size:11px;color:#22c55e;font-weight:700;margin-top:4px;display:block;">● Active</span>' : ''}`;
       el.onclick = () => {
-        pendingModel = model.id;
-        if (orModelDisplay) orModelDisplay.textContent = model.id + " (unsaved)";
+        applyActiveModel(model.id);
         renderModels();
+        toast(`Model active: ${model.id.split("/").pop()}`, "success");
       };
       modelsList.appendChild(el);
     });
@@ -2626,6 +2629,8 @@ function bindEvents() {
             localStorage.setItem("ghostwaiter:custom_providers", val);
           } else if (p === "custom_api_type") {
             localStorage.setItem("ghostwaiter:custom_api_type", val);
+          } else if (p === "custom_active_id") {
+            localStorage.setItem("ghostwaiter:custom_active_id", val);
           } else {
             localStorage.setItem(`ghostwaiter:key_${p}`, val);
           }
@@ -2677,6 +2682,7 @@ function bindEvents() {
       custom_endpoint: localStorage.getItem("ghostwaiter:custom_endpoint") || "",
       custom_api_type: localStorage.getItem("ghostwaiter:custom_api_type") || "openai",
       custom_providers: localStorage.getItem("ghostwaiter:custom_providers") || "[]",
+      custom_active_id: localStorage.getItem("ghostwaiter:custom_active_id") || "",
     };
     
     // Clear edit mode if open
@@ -2720,13 +2726,6 @@ function bindEvents() {
 
   if ($("#ai-settings-save")) {
     $("#ai-settings-save").onclick = async () => {
-      // Commit pending model selection to localStorage before saving
-      if (pendingModel) {
-        localStorage.setItem("ghostwaiter:openrouter_model", pendingModel);
-        if (orModelDisplay) orModelDisplay.textContent = pendingModel;
-        pendingModel = null;
-        updateModelIndicator();
-      }
       await saveAIConfigToSupabase();
       initialProvider = localStorage.getItem("ghostwaiter:ai_provider") || "custom";
       initialModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
@@ -2736,6 +2735,7 @@ function bindEvents() {
         custom_endpoint: localStorage.getItem("ghostwaiter:custom_endpoint") || "",
         custom_api_type: localStorage.getItem("ghostwaiter:custom_api_type") || "openai",
         custom_providers: localStorage.getItem("ghostwaiter:custom_providers") || "[]",
+        custom_active_id: localStorage.getItem("ghostwaiter:custom_active_id") || "",
       };
       $("#ai-modal").classList.add("hidden");
       toast("AI settings saved", "success");
