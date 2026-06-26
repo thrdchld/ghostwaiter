@@ -2990,11 +2990,19 @@ pre,
   .sheet {
     border-radius: var(--radius-lg);
     bottom: 32px;
-    left: 50%;
     max-width: 620px;
     right: auto;
-    transform: translateX(-50%);
     width: calc(100% - 40px);
+  }
+  .app-shell:not(.sidebar-minimized) ~ .sheet {
+    left: calc(50% + var(--sidebar-width) / 2);
+    transform: translateX(-50%);
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .app-shell.sidebar-minimized ~ .sheet {
+    left: calc(50% + 76px / 2);
+    transform: translateX(-50%);
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* Note card actions: hover-only on desktop */

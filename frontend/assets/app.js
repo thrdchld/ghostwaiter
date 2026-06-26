@@ -1376,7 +1376,7 @@ function resetChat() {
 
 async function showChatList() {
   try {
-    openSheet("Riwayat Chat", `<div class="sheet-tabs"><button id="active-chat-tab" class="chip active">Active</button><button id="archive-chat-tab" class="chip">Archive</button></div><div id="chat-list-content"></div>`);
+    openSheet("Chat History", `<div class="sheet-tabs"><button id="active-chat-tab" class="chip active">Active</button><button id="archive-chat-tab" class="chip">Archive</button></div><div id="chat-list-content"></div>`);
     $("#active-chat-tab").onclick = () => renderChatHistory(false);
     $("#archive-chat-tab").onclick = () => renderChatHistory(true);
     
