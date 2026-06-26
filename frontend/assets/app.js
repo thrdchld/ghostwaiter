@@ -2675,28 +2675,40 @@ function bindEvents() {
   // Backdrop click-outside-to-close handlers
   const dataModal = $("#data-modal");
   if (dataModal) {
-    dataModal.onclick = (e) => {
-      if (e.target === dataModal) {
+    let isMouseDownOnBackdrop = false;
+    dataModal.addEventListener("mousedown", (e) => {
+      isMouseDownOnBackdrop = (e.target === dataModal);
+    });
+    dataModal.addEventListener("click", (e) => {
+      if (e.target === dataModal && isMouseDownOnBackdrop) {
         dataModal.classList.add("hidden");
       }
-    };
+    });
   }
   const aiModal = $("#ai-modal");
   if (aiModal) {
-    aiModal.onclick = (e) => {
-      if (e.target === aiModal) {
+    let isMouseDownOnBackdrop = false;
+    aiModal.addEventListener("mousedown", (e) => {
+      isMouseDownOnBackdrop = (e.target === aiModal);
+    });
+    aiModal.addEventListener("click", (e) => {
+      if (e.target === aiModal && isMouseDownOnBackdrop) {
         closeAIModalWithCheck();
       }
-    };
+    });
   }
 
   const customProviderModal = $("#custom-provider-modal");
   if (customProviderModal) {
-    customProviderModal.onclick = (e) => {
-      if (e.target === customProviderModal) {
+    let isMouseDownOnBackdrop = false;
+    customProviderModal.addEventListener("mousedown", (e) => {
+      isMouseDownOnBackdrop = (e.target === customProviderModal);
+    });
+    customProviderModal.addEventListener("click", (e) => {
+      if (e.target === customProviderModal && isMouseDownOnBackdrop) {
         window.closeCustomProviderModal();
       }
-    };
+    });
   }
 
   // Sidebar click dismisses open modals (using capturing phase to intercept nav buttons/actions)
