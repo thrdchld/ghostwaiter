@@ -2088,6 +2088,8 @@ function bindEvents() {
     apiKeyInput.value = localStorage.getItem(`ghostwaiter:key_${p}`) || "";
     toggleCustomEndpointView(p);
     modelsBrowser?.classList.add("hidden");
+    const placeholder = $("#models-browser-placeholder");
+    if (placeholder) placeholder.classList.remove("hidden");
     allModels = [];
     updateModelIndicator();
   });
@@ -2145,9 +2147,16 @@ function bindEvents() {
       const fetcher = PROVIDER_MODEL_URLS[provider];
       if (!fetcher) throw new Error("Provider not supported");
       allModels = await fetcher(key);
+      
+      const placeholder = $("#models-browser-placeholder");
+      if (placeholder) placeholder.classList.add("hidden");
       modelsBrowser?.classList.remove("hidden");
+      
       renderModels();
       toast(`Successfully loaded ${allModels.length} models`, "success");
+      
+      const modelsTab = document.querySelector('.ai-tab-btn[data-tab="models"]');
+      if (modelsTab) modelsTab.click();
     } catch (err) {
       toast(`Failed to load models: ${err.message}`, "error");
     } finally {
@@ -2387,6 +2396,21 @@ function bindEvents() {
     }
   };
 
+  // ── AI Settings Tabs Bindings ──────────────────────────────────────────
+  const aiTabBtns = document.querySelectorAll(".ai-tab-btn");
+  const aiTabContents = document.querySelectorAll(".ai-tab-content");
+  
+  aiTabBtns.forEach(btn => {
+    btn.onclick = () => {
+      aiTabBtns.forEach(b => b.classList.remove("active"));
+      aiTabContents.forEach(c => c.classList.add("hidden"));
+      btn.classList.add("active");
+      const tabId = `ai-tab-${btn.dataset.tab}`;
+      const targetContent = document.getElementById(tabId);
+      if (targetContent) targetContent.classList.remove("hidden");
+    };
+  });
+
   if ($("#ai-settings-button")) $("#ai-settings-button").onclick = () => {
     initialProvider = localStorage.getItem("ghostwaiter:ai_provider") || "openrouter";
     initialModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
@@ -2407,6 +2431,10 @@ function bindEvents() {
       customEndpointInput.value = initialKeys.custom_endpoint || "";
     }
     toggleCustomEndpointView(initialProvider);
+
+    // Reset tabs to connection
+    const connectionTab = document.querySelector('.ai-tab-btn[data-tab="connection"]');
+    if (connectionTab) connectionTab.click();
 
     $("#ai-modal").classList.remove("hidden");
   };

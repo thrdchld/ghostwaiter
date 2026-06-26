@@ -3004,4 +3004,65 @@ pre,
   animation: emptyStatePulse 3.5s ease-in-out infinite;
 }
 
+/* ─── AI Settings Dialog Tabs ─────────────────────────────────────────────── */
+.ai-tabs {
+  display: flex;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  margin-bottom: 18px;
+  gap: 4px;
+}
+.ai-tab-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+.ai-tab-btn:hover {
+  color: var(--text-primary);
+}
+.ai-tab-btn.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.ai-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ai-tab-content.hidden {
+  display: none !important;
+}
+
+/* Models Selection Placeholder */
+.models-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 20px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-md);
+  text-align: center;
+  background: var(--bg-hover);
+  margin-top: 10px;
+}
+.models-placeholder p {
+  margin: 0 0 6px 0 !important;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 
