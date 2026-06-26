@@ -313,10 +313,10 @@ window.editCustomProvider = function(event, id) {
   if ($("#ai-custom-key")) $("#ai-custom-key").value = p.key || "";
   
   const apiType = p.type || "openai";
-  const radio = $(`input[name="manager-api-type"][value="${apiType}"]`);
-  if (radio) {
-    radio.checked = true;
-    updateRadioLabels();
+  const customFormatSelect = $("#ai-custom-format");
+  if (customFormatSelect) {
+    customFormatSelect.value = apiType;
+    handleCustomFormatChange();
   }
   
   const loadBtn = $("#custom-load-btn");
@@ -334,10 +334,10 @@ function cancelEditingProvider() {
   if ($("#ai-custom-endpoint")) $("#ai-custom-endpoint").value = "";
   if ($("#ai-custom-key")) $("#ai-custom-key").value = "";
   
-  const radioOpenAI = $('input[name="manager-api-type"][value="openai"]');
-  if (radioOpenAI) {
-    radioOpenAI.checked = true;
-    updateRadioLabels();
+  const customFormatSelect = $("#ai-custom-format");
+  if (customFormatSelect) {
+    customFormatSelect.value = "openai";
+    handleCustomFormatChange();
   }
   
   const loadBtn = $("#custom-load-btn");
@@ -2109,30 +2109,29 @@ function bindEvents() {
     }
   };
 
-  window.updateRadioLabels = function() {
-    const radioOpenAI = $('input[name="manager-api-type"][value="openai"]');
-    const radioAnthropic = $('input[name="manager-api-type"][value="anthropic"]');
-    const labelOpenAI = $("#label-type-openai");
-    const labelAnthropic = $("#label-type-anthropic");
+  window.updateRadioLabels = function() {};
+
+  window.handleCustomFormatChange = function() {
+    const formatSelect = $("#ai-custom-format");
+    if (!formatSelect) return;
     
-    if (!labelOpenAI || !labelAnthropic) return;
+    const format = formatSelect.value;
+    const isOllama = format === "ollama";
     
-    if (radioOpenAI?.checked) {
-      labelOpenAI.style.borderColor = "var(--accent)";
-      labelOpenAI.style.background = "color-mix(in srgb, var(--accent) 10%, var(--bg-surface))";
-      labelOpenAI.style.color = "var(--text-primary)";
-      
-      labelAnthropic.style.borderColor = "var(--border)";
-      labelAnthropic.style.background = "var(--bg-surface)";
-      labelAnthropic.style.color = "var(--text-secondary)";
-    } else if (radioAnthropic?.checked) {
-      labelAnthropic.style.borderColor = "var(--accent)";
-      labelAnthropic.style.background = "color-mix(in srgb, var(--accent) 10%, var(--bg-surface))";
-      labelAnthropic.style.color = "var(--text-primary)";
-      
-      labelOpenAI.style.borderColor = "var(--border)";
-      labelOpenAI.style.background = "var(--bg-surface)";
-      labelOpenAI.style.color = "var(--text-secondary)";
+    // ENDPOINT URL Placeholder:
+    const endpointInput = $("#ai-custom-endpoint");
+    if (endpointInput) {
+      if (isOllama) {
+        endpointInput.placeholder = "http://localhost:11434";
+      } else {
+        endpointInput.placeholder = "https://api.example.com/v1";
+      }
+    }
+    
+    // API KEY Visibility:
+    const keyContainer = $("#ai-custom-key-container");
+    if (keyContainer) {
+      keyContainer.classList.toggle("hidden", isOllama);
     }
   };
 
@@ -2316,23 +2315,26 @@ function bindEvents() {
   if (customLoadBtn) {
     customLoadBtn.onclick = async () => {
       const endpoint = ($("#ai-custom-endpoint")?.value || "").trim();
-      const key = ($("#ai-custom-key")?.value || "").trim();
-      const type = ($("input[name='manager-api-type']:checked")?.value || "openai").trim();
+      const type = ($("#ai-custom-format")?.value || "openai").trim();
+      const key = type === "ollama" ? "" : ($("#ai-custom-key")?.value || "").trim();
       const customName = ($("#ai-manager-name")?.value || "").trim();
       
       if (!endpoint) return toast("Enter API Endpoint URL first", "error");
-      if (!key) return toast("Enter API Key first", "error");
+      if (type !== "ollama" && !key) return toast("Enter API Key first", "error");
       
       customLoadBtn.disabled = true;
       customLoadBtn.textContent = "Verifying...";
       try {
         // Verify connection via backend to bypass CORS and check credentials
+        const headers = {
+          "X-AI-Provider": `custom|${type}|${endpoint}`
+        };
+        if (type !== "ollama") {
+          headers["X-OpenRouter-Key"] = key;
+        }
         const res = await jsonApi("/api/ai/test-connection", {
           method: "POST",
-          headers: {
-            "X-AI-Provider": `custom|${type}|${endpoint}`,
-            "X-OpenRouter-Key": key
-          }
+          headers: headers
         });
         
         if (!res.connected) {
@@ -2343,9 +2345,17 @@ function bindEvents() {
         let generatedName = "Custom";
         try {
           const urlObj = new URL(endpoint);
-          generatedName = `${urlObj.hostname} (${type === "anthropic" ? "Anthropic" : "OpenAI"})`;
+          let formatLabel = "OpenAI";
+          if (type === "anthropic") formatLabel = "Anthropic";
+          else if (type === "google") formatLabel = "Google Gemini";
+          else if (type === "ollama") formatLabel = "Ollama";
+          generatedName = `${urlObj.hostname} (${formatLabel})`;
         } catch (e) {
-          generatedName = `Custom (${type === "anthropic" ? "Anthropic" : "OpenAI"})`;
+          let formatLabel = "OpenAI";
+          if (type === "anthropic") formatLabel = "Anthropic";
+          else if (type === "google") formatLabel = "Google Gemini";
+          else if (type === "ollama") formatLabel = "Ollama";
+          generatedName = `Custom (${formatLabel})`;
         }
 
         const finalName = customName || generatedName;
@@ -2653,9 +2663,10 @@ function bindEvents() {
     };
   });
 
-  document.querySelectorAll('input[name="manager-api-type"]').forEach(radio => {
-    radio.addEventListener("change", updateRadioLabels);
-  });
+  const customFormatSelect = $("#ai-custom-format");
+  if (customFormatSelect) {
+    customFormatSelect.addEventListener("change", handleCustomFormatChange);
+  }
 
   if ($("#ai-settings-button")) $("#ai-settings-button").onclick = () => {
     initialProvider = localStorage.getItem("ghostwaiter:ai_provider") || "custom";
@@ -2675,9 +2686,11 @@ function bindEvents() {
     if ($("#ai-manager-name")) $("#ai-manager-name").value = "";
     if ($("#ai-custom-endpoint")) $("#ai-custom-endpoint").value = "";
     if ($("#ai-custom-key")) $("#ai-custom-key").value = "";
-    const radioOpenAI = $('input[name="manager-api-type"][value="openai"]');
-    if (radioOpenAI) radioOpenAI.checked = true;
-    updateRadioLabels();
+    const customFormatSelect = $("#ai-custom-format");
+    if (customFormatSelect) {
+      customFormatSelect.value = "openai";
+      handleCustomFormatChange();
+    }
 
     // Tab bindings: default to provider-model
     const providerModelTab = document.querySelector('.ai-tab-btn[data-tab="provider-model"]');

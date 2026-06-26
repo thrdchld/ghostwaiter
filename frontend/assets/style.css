@@ -2764,6 +2764,11 @@ pre,
   to { transform: translateY(0); }
 }
 
+@keyframes slideUpDesktop {
+  from { transform: translateX(-50%) translateY(100%); }
+  to { transform: translateX(-50%) translateY(0); }
+}
+
 /* Premium Custom CSS Tooltips (Desktop Only) */
 @media (hover: hover) and (pointer: fine) {
   [data-tooltip] {
@@ -2994,6 +2999,9 @@ pre,
     right: auto;
     width: calc(100% - 40px);
   }
+  .sheet:not(.hidden) {
+    animation: slideUpDesktop 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
   .app-shell:not(.sidebar-minimized) ~ .sheet {
     left: calc(50% + var(--sidebar-width) / 2);
     transform: translateX(-50%);
@@ -3094,4 +3102,29 @@ pre,
   .app-shell.sidebar-minimized ~ .modal-overlay {
     padding-left: 76px;
   }
+}
+
+/* Custom AI Provider Dialog Green Styling */
+#custom-provider-modal input:focus,
+#custom-provider-modal select:focus {
+  border-color: #10B981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25) !important;
+}
+
+#custom-provider-modal .button.primary {
+  background: #10B981 !important;
+  border-color: #10B981 !important;
+  color: #ffffff !important;
+}
+
+#custom-provider-modal .button.primary:hover,
+#custom-provider-modal .button.primary:focus {
+  background: #059669 !important;
+  border-color: #059669 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25) !important;
+}
+
+#custom-provider-modal .button:not(.primary):focus {
+  border-color: #10B981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25) !important;
 }

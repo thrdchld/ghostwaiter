@@ -621,7 +621,7 @@
   <div id="custom-provider-modal" class="backdrop modal-overlay hidden">
     <div class="dialog-card" style="max-width: 440px; width: 90%; padding: 24px; display: flex; flex-direction: column;">
       <h3 id="custom-provider-modal-title" style="margin: 0 0 4px 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">Add AI Provider</h3>
-      <p style="margin-bottom: 20px; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.45;">Configure a custom OpenAI or Anthropic compatible API connection.</p>
+      <p style="margin-bottom: 20px; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.45;">Configure a custom API connection for your preferred format.</p>
       
       <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 24px;">
         <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -634,23 +634,19 @@
           <input id="ai-custom-endpoint" type="text" placeholder="https://api.example.com/v1" autocomplete="off" style="width: 100%;">
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div id="ai-custom-key-container" style="display: flex; flex-direction: column; gap: 6px;">
           <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">API Key</label>
           <input id="ai-custom-key" type="password" placeholder="Enter API Key" autocomplete="off" style="width: 100%;">
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 6px;">
-          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">API Type</label>
-          <div style="display: flex; gap: 8px;">
-            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; font-size: 13px; font-weight: 600; background: var(--bg-surface); color: var(--text-secondary); transition: all 0.2s; user-select: none;" id="label-type-openai">
-              <input type="radio" name="manager-api-type" value="openai" checked style="accent-color: var(--accent); margin: 0; cursor: pointer;">
-              OpenAI Compatible
-            </label>
-            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; font-size: 13px; font-weight: 600; background: var(--bg-surface); color: var(--text-secondary); transition: all 0.2s; user-select: none;" id="label-type-anthropic">
-              <input type="radio" name="manager-api-type" value="anthropic" style="accent-color: var(--accent); margin: 0; cursor: pointer;">
-              Anthropic Compatible
-            </label>
-          </div>
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">API Format</label>
+          <select id="ai-custom-format" style="width: 100%;">
+            <option value="openai">OpenAI Compatible</option>
+            <option value="anthropic">Anthropic Compatible</option>
+            <option value="google">Google Gemini</option>
+            <option value="ollama">Ollama</option>
+          </select>
         </div>
       </div>
 

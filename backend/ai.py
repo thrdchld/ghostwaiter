@@ -81,6 +81,17 @@ class AIService:
                         custom_url += "messages"
                     else:
                         custom_url += "/messages"
+            elif api_type == "ollama":
+                if "/v1" not in custom_url:
+                    if custom_url.endswith("/"):
+                        custom_url += "v1/chat/completions"
+                    else:
+                        custom_url += "/v1/chat/completions"
+                else:
+                    if custom_url.endswith("/"):
+                        custom_url += "chat/completions"
+                    else:
+                        custom_url += "/chat/completions"
             else:
                 if not custom_url.endswith("/chat/completions"):
                     if custom_url.endswith("/"):
@@ -116,7 +127,8 @@ class AIService:
         max_tokens: int = 900,
         provider: str = "openrouter",
     ) -> AsyncIterator[str]:
-        if not api_key:
+        is_ollama = provider.startswith("custom|") and len(provider.split("|", 2)) >= 2 and provider.split("|", 2)[1].strip() == "ollama"
+        if not api_key and not is_ollama:
             provider = "default"
             api_key = settings.supabase_key or "dummy"
         if not model:
@@ -184,7 +196,8 @@ class AIService:
         temperature: float = 0.3,
         provider: str = "openrouter",
     ) -> str:
-        if not api_key:
+        is_ollama = provider.startswith("custom|") and len(provider.split("|", 2)) >= 2 and provider.split("|", 2)[1].strip() == "ollama"
+        if not api_key and not is_ollama:
             provider = "default"
             api_key = settings.supabase_key or "dummy"
         if not model:
@@ -329,7 +342,8 @@ class AIService:
 
     async def test_connection(self, api_key: str, model: str, provider: str) -> tuple[bool, str]:
         # Fallback to default 9Router if credentials are not provided
-        if not api_key:
+        is_ollama = provider.startswith("custom|") and len(provider.split("|", 2)) >= 2 and provider.split("|", 2)[1].strip() == "ollama"
+        if not api_key and not is_ollama:
             if provider == "default" or not provider:
                 api_key = settings.supabase_key or "dummy"
             else:
@@ -390,6 +404,12 @@ class AIService:
                             return False, f"HTTP {res.status_code}: {res.text}"
                 except Exception as e:
                     return False, f"Connection error: {e}"
+            elif api_type == "ollama":
+                if "/v1" in custom_url:
+                    url = f"{custom_url}/models" if not custom_url.endswith("/") else f"{custom_url}models"
+                else:
+                    url = f"{custom_url}/api/tags" if not custom_url.endswith("/") else f"{custom_url}api/tags"
+                headers = {}
             else:
                 if custom_url.endswith("/"):
                     url = f"{custom_url}models"
