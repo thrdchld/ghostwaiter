@@ -2646,280 +2646,171 @@ pre,
   }
 }
 
-/* ─── Mobile-First Design Overhaul ─────────────────────────────────────── */
+/* ─── Mobile Design — Sidebar Drawer Overlay (Gemini/ChatGPT style) ──────── */
 
-/* Bottom Navigation Bar for Mobile - Primary navigation pattern */
 @media (max-width: 780px) {
-  /* Hide traditional sidebar completely on mobile */
-  #sidebar {
-    display: none !important;
-  }
+  /* Show hamburger on mobile */
+  .hidden-desktop { display: inline-flex !important; }
 
-  /* Remove left-sidebar spacing */
-  #sidebar-backdrop {
-    display: none !important;
-  }
-
-  /* App shell takes full width */
+  /* App shell: full width, no sidebar push */
   .app-shell {
-    flex-direction: column;
+    position: relative;
   }
 
-  /* Main wrapper takes full height minus bottom nav */
-  .main-wrapper {
-    padding-top: calc(56px + env(safe-area-inset-top, 0px));
-    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
-    height: 100dvh;
-    overflow: hidden;
+  /* Sidebar: slides in as drawer overlay, closed by default */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 280px !important;
+    z-index: 300;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%); /* closed = off screen */
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.28s ease;
   }
 
-  /* Topbar compact on mobile */
+  /* Sidebar open state (app-shell doesn't have .sidebar-minimized) */
+  .app-shell:not(.sidebar-minimized) .sidebar {
+    transform: translateX(0);
+  }
+
+  /* Sidebar minimized = always closed on mobile */
+  .sidebar.minimized {
+    transform: translateX(-100%) !important;
+    box-shadow: none;
+  }
+
+  /* Backdrop: dims content and catches taps when sidebar is open */
+  #sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200; /* below sidebar (300), above content */
+    background: var(--bg-backdrop);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    pointer-events: none;
+    animation: fadeIn 0.22s ease forwards;
+  }
+  .app-shell:not(.sidebar-minimized) #sidebar-backdrop {
+    display: block;
+    pointer-events: all;
+  }
+
+  /* Topbar: fixed, compact for mobile */
   .topbar {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     z-index: 100;
-    height: 56px;
-    padding: 0 16px;
+    height: 58px;
+    padding: 0 14px;
     padding-top: env(safe-area-inset-top, 0px);
-    height: calc(56px + env(safe-area-inset-top, 0px));
+    height: calc(58px + env(safe-area-inset-top, 0px));
     transform: translateZ(0);
     -webkit-transform: translateZ(0);
   }
 
-  /* Hide mobile sidebar toggle - we use bottom nav now */
-  #mobile-sidebar-toggle {
-    display: none !important;
+  /* Push main content below topbar */
+  .main-wrapper {
+    padding-top: calc(58px + env(safe-area-inset-top, 0px));
   }
 
-  /* Workspace button more compact */
+  /* Hamburger icon — visible on mobile */
+  #mobile-sidebar-toggle {
+    display: inline-flex !important;
+    margin-right: 6px;
+    padding: 8px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  /* Workspace button compact */
   .workspace-button {
     min-height: 40px;
     padding: 6px 10px;
   }
-  .workspace-button .eyebrow {
-    font-size: 9px;
-  }
-  .workspace-button strong {
-    font-size: 13px;
-  }
+  .workspace-button .eyebrow { font-size: 9px; }
+  .workspace-button strong { font-size: 13px; margin-top: 1px; }
 
-  /* Status cluster smaller */
-  .status-cluster {
-    gap: 6px;
-  }
-  .status-pill {
-    min-height: 40px;
-    padding: 6px 10px;
-    font-size: 11px;
-  }
-  .sync-button {
-    width: 40px;
-    height: 40px;
-  }
+  /* Status cluster compact */
+  .status-cluster { gap: 6px; }
+  .status-pill { min-height: 40px; padding: 6px 10px; font-size: 11px; gap: 5px; }
+  .sync-button { width: 40px; height: 40px; }
 
-  /* Bottom Navigation Bar */
-  .bottom-nav {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: calc(68px + env(safe-area-inset-bottom, 0px));
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-top: 1px solid var(--border);
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-around;
-    z-index: 100;
-    padding-top: 8px;
-  }
+  /* Main content: no horizontal padding override from desktop */
+  .main { padding: 0; max-width: 100%; }
 
-  .bottom-nav-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-    background: none;
-    border: 0;
-    color: var(--text-tertiary);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    padding: 6px 8px;
-    border-radius: 12px;
-    min-width: 56px;
-    min-height: 48px;
-    cursor: pointer;
-    transition: color 0.15s ease, background 0.15s ease;
-    text-transform: uppercase;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-    -webkit-user-select: none;
-  }
+  /* View padding: less on mobile */
+  .view { padding: 20px 16px 32px; }
 
-  .bottom-nav-item svg {
-    width: 22px;
-    height: 22px;
-    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
+  /* Chat heading */
+  #view-chat .section-heading { padding: 14px 18px 10px; }
 
-  .bottom-nav-item:active svg {
-    transform: scale(0.88);
-  }
-
-  .bottom-nav-item.active {
-    color: var(--text-primary);
-  }
-
-  .bottom-nav-item.active svg {
-    stroke-width: 2.5;
-  }
-
-  .bottom-nav-item span.nav-dot {
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--text-primary);
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    margin-top: -2px;
-  }
-
-  .bottom-nav-item.active span.nav-dot {
-    opacity: 1;
-  }
-
-  /* Main content full width, no padding */
-  .main {
-    padding: 0;
-    max-width: 100%;
-  }
-
-  /* Chat view padding */
+  /* Chat messages: more breathing room on sides, space for composer */
   .chat-messages {
-    padding: 16px 16px 120px;
+    padding: 20px 16px 130px;
   }
 
-  /* Section padding */
-  .view {
-    padding: 20px 16px;
-  }
-
-  /* Section headings smaller */
-  .section-heading h1 {
-    font-size: 26px;
-  }
-
-  /* Composer stays above bottom nav */
+  /* Composer: edge-to-edge feel */
   .composer-container {
     padding-left: 12px;
     padding-right: 12px;
-    padding-bottom: env(safe-area-inset-bottom, 12px);
-    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
 
-  .composer-form {
-    border-radius: 20px;
-    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.08), var(--shadow-lg);
-  }
+  /* Scroll to bottom button */
+  .scroll-bottom-btn { bottom: 100px; right: 14px; }
 
-  /* Scroll button above bottom nav */
-  .scroll-bottom-btn {
-    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
-    right: 16px;
-  }
+  /* Message bubbles slightly wider on narrow screens */
+  .message { max-width: 90%; }
 
-  /* Messages max width */
-  .message {
-    max-width: 88%;
-  }
+  /* Section heading smaller */
+  .section-heading h1 { font-size: 26px; }
 
-  /* Note cards on mobile: always show actions */
-  .note-card-actions {
-    opacity: 1;
-  }
+  /* Brain stats 2-col */
+  .brain-stats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
 
-  .note-card-pin-btn {
-    opacity: 1;
-  }
+  /* Tab row wrapping */
+  .tab-row { margin: 0 0 20px; padding: 0; }
 
-  /* Notes grid single column on small screens */
-  .notes-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  }
+  /* Sidebar footer */
+  .sidebar-footer { padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
 
-  /* Brain stats 2-column */
-  .brain-stats {
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  }
+  /* Note card actions always visible on touch */
+  .note-card-actions { opacity: 1; }
+  .note-card-pin-btn { opacity: 1; }
 
-  /* Chips wrap better */
-  .tab-row {
-    margin: 0 0 20px;
-    padding: 0;
-  }
+  /* Settings rows: finger-tap friendly */
+  .setting-row { min-height: 72px; padding: 18px 20px; }
 
-  /* Sheet full-screen on mobile */
+  /* Toast: safe zone */
+  .toast { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Sheet: safe zone at bottom */
   .sheet {
     border-radius: 22px 22px 0 0;
     bottom: 0;
-    left: 0;
-    right: 0;
     max-height: 92dvh;
     padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
-  /* Dialog cards full width */
-  .dialog-card {
-    width: 95%;
-    padding: 20px;
-  }
-
-  /* Toast above bottom nav */
-  .toast {
-    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
-  }
-
-  /* Settings: taller rows for finger tap */
-  .setting-row {
-    min-height: 72px;
-    padding: 18px 20px;
-  }
-
-  /* Disable hover tooltips on mobile (already handled by media query but be explicit) */
-  [data-tooltip]::after {
-    display: none !important;
-  }
-
-  /* Empty state bottom padding so it's centered above composer */
-  .empty-state {
-    padding-bottom: 80px;
-  }
-
-  /* Chat heading smaller */
-  #view-chat .section-heading {
-    padding: 14px 16px 10px;
-  }
+  /* Dialog: slightly narrower */
+  .dialog-card { width: 94%; padding: 20px; }
 }
 
-/* ─── Desktop Refinements ──────────────────────────────────────────────── */
+/* ─── Desktop Refinements ─────────────────────────────────────────────────── */
 @media (min-width: 781px) {
-  /* Hide bottom nav on desktop */
-  .bottom-nav {
-    display: none !important;
-  }
+  /* Desktop: sidebar is static (already the default), hide mobile toggle */
+  .hidden-desktop { display: none !important; }
 
-  /* More padding for wide content */
-  .main {
-    padding-left: 32px;
-    padding-right: 32px;
-  }
+  /* Content padding */
+  .main { padding-left: 32px; padding-right: 32px; }
 
-  /* Sheet desktop style */
+  /* Sheet floats centered */
   .sheet {
     border-radius: var(--radius-lg);
     bottom: 32px;
@@ -2930,30 +2821,22 @@ pre,
     width: calc(100% - 40px);
   }
 
-  /* Note card actions show on hover only on desktop */
-  .note-card-actions {
-    opacity: 0;
-  }
-  .note-card:hover .note-card-actions {
-    opacity: 1;
-  }
+  /* Note card actions: hover-only on desktop */
+  .note-card-actions { opacity: 0; }
+  .note-card:hover .note-card-actions { opacity: 1; }
 
-  /* Note card pin button show on hover only on desktop */
-  .note-card-pin-btn {
-    opacity: 0;
-  }
+  .note-card-pin-btn { opacity: 0; }
   .note-card:hover .note-card-pin-btn,
-  .note-card-pin-btn.active {
-    opacity: 1;
-  }
+  .note-card-pin-btn.active { opacity: 1; }
 }
 
-/* ─── Fade-in animation for empty state text ────────────────────────────── */
+/* ─── Empty state gentle pulse ────────────────────────────────────────────── */
 @keyframes emptyStatePulse {
-  0%, 100% { opacity: 0.7; }
+  0%, 100% { opacity: 0.65; }
   50% { opacity: 1; }
 }
-
 .empty-state strong {
-  animation: emptyStatePulse 3s ease-in-out infinite;
+  animation: emptyStatePulse 3.5s ease-in-out infinite;
 }
+
+

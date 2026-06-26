@@ -463,8 +463,6 @@ function closeSheet() {
 function showView(view) {
   $$(".view").forEach(node => node.classList.toggle("active", node.id === `view-${view}`));
   $$(".nav-item").forEach(node => node.classList.toggle("active", node.dataset.view === view));
-  // Sync mobile bottom nav
-  $$(".bottom-nav-item").forEach(node => node.classList.toggle("active", node.dataset.view === view));
   localStorage.setItem("ghostwaiter:activeView", view);
   if (view === "brain") loadBrain();
   if (view === "notes") loadNotes();
@@ -1769,10 +1767,11 @@ function bindEvents() {
     }
   });
 
-  // ── Sidebar toggle (mobile backdrop blocks all background interaction) ─
-  $$(".nav-item").forEach(button => button.onclick = () => { showView(button.dataset.view); if (window.innerWidth <= 780) toggleSidebar(); });
-  // ── Mobile Bottom Navigation ──────────────────────────────────────────
-  $$(".bottom-nav-item").forEach(button => button.onclick = () => { showView(button.dataset.view); });
+  // ── Sidebar nav items — close sidebar on mobile after selecting a view ─
+  $$(".nav-item").forEach(button => button.onclick = () => {
+    showView(button.dataset.view);
+    if (window.innerWidth <= 780) toggleSidebar();
+  });
   if ($("#sidebar-toggle")) $("#sidebar-toggle").onclick = toggleSidebar;
   if ($("#mobile-sidebar-toggle")) $("#mobile-sidebar-toggle").onclick = toggleSidebar;
   if ($("#sidebar-backdrop")) {
