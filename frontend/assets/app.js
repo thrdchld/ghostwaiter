@@ -287,6 +287,15 @@ function renderCustomProviders() {
 
 let editingProviderId = null;
 
+window.openCustomProviderModal = function() {
+  $("#custom-provider-modal").classList.remove("hidden");
+};
+
+window.closeCustomProviderModal = function() {
+  $("#custom-provider-modal").classList.add("hidden");
+  cancelEditingProvider();
+};
+
 window.editCustomProvider = function(event, id) {
   if (event) event.stopPropagation();
   const providers = getCustomProviders();
@@ -296,8 +305,8 @@ window.editCustomProvider = function(event, id) {
   editingProviderId = p.id;
   
   // Set header to Edit AI Provider
-  const formHeader = $("#ai-tab-custom [style*='text-transform: uppercase']");
-  if (formHeader) formHeader.textContent = `Edit AI Provider: ${p.name}`;
+  const formHeader = $("#custom-provider-modal-title");
+  if (formHeader) formHeader.textContent = "Edit AI Provider";
   
   if ($("#ai-manager-name")) $("#ai-manager-name").value = p.name;
   if ($("#ai-custom-endpoint")) $("#ai-custom-endpoint").value = p.endpoint;
@@ -313,31 +322,12 @@ window.editCustomProvider = function(event, id) {
   const loadBtn = $("#custom-load-btn");
   if (loadBtn) loadBtn.textContent = "Verify & Update";
   
-  // Add a cancel edit button if not already present
-  let cancelBtn = $("#custom-edit-cancel-btn");
-  if (!cancelBtn) {
-    cancelBtn = document.createElement("button");
-    cancelBtn.id = "custom-edit-cancel-btn";
-    cancelBtn.className = "button compact secondary";
-    cancelBtn.type = "button";
-    cancelBtn.style.marginRight = "8px";
-    cancelBtn.style.flex = "1";
-    cancelBtn.style.justifyContent = "center";
-    cancelBtn.textContent = "Cancel Edit";
-    cancelBtn.onclick = cancelEditingProvider;
-    
-    // Make wrapper container for actions
-    const btnParent = loadBtn.parentNode;
-    btnParent.style.display = "flex";
-    btnParent.style.gap = "8px";
-    btnParent.insertBefore(cancelBtn, loadBtn);
-    loadBtn.style.flex = "1";
-  }
+  window.openCustomProviderModal();
 };
 
 function cancelEditingProvider() {
   editingProviderId = null;
-  const formHeader = $("#ai-tab-custom [style*='text-transform: uppercase']");
+  const formHeader = $("#custom-provider-modal-title");
   if (formHeader) formHeader.textContent = "Add AI Provider";
   
   if ($("#ai-manager-name")) $("#ai-manager-name").value = "";
@@ -352,12 +342,8 @@ function cancelEditingProvider() {
   
   const loadBtn = $("#custom-load-btn");
   if (loadBtn) {
-    loadBtn.textContent = "Load & Verify";
-    loadBtn.style.flex = "";
+    loadBtn.textContent = "Verify & Add";
   }
-  
-  const cancelBtn = $("#custom-edit-cancel-btn");
-  if (cancelBtn) cancelBtn.remove();
 }
 
 window.selectCustomProvider = function(id) {
@@ -2293,6 +2279,7 @@ function bindEvents() {
       const endpoint = ($("#ai-custom-endpoint")?.value || "").trim();
       const key = ($("#ai-custom-key")?.value || "").trim();
       const type = ($("input[name='manager-api-type']:checked")?.value || "openai").trim();
+      const customName = ($("#ai-manager-name")?.value || "").trim();
       
       if (!endpoint) return toast("Enter API Endpoint URL first", "error");
       if (!key) return toast("Enter API Key first", "error");
@@ -2321,33 +2308,33 @@ function bindEvents() {
         } catch (e) {
           generatedName = `Custom (${type === "anthropic" ? "Anthropic" : "OpenAI"})`;
         }
+
+        const finalName = customName || generatedName;
         
         const providers = getCustomProviders();
         
         if (editingProviderId) {
           const p = providers.find(x => x.id === editingProviderId);
           if (p) {
-            p.name = generatedName;
+            p.name = finalName;
             p.endpoint = endpoint;
             p.key = key;
             p.type = type;
-            toast(`Successfully updated provider: ${generatedName}`, "success");
+            toast(`Successfully updated provider: ${finalName}`, "success");
           }
-          cancelEditingProvider();
+          window.closeCustomProviderModal();
         } else {
           const id = `cp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
           providers.push({
             id,
-            name: generatedName,
+            name: finalName,
             endpoint: endpoint,
             key: key,
             type: type
           });
-          toast(`Successfully verified and added: ${generatedName}`, "success");
+          toast(`Successfully verified and added: ${finalName}`, "success");
           
-          // Clear add form inputs
-          if ($("#ai-custom-endpoint")) $("#ai-custom-endpoint").value = "";
-          if ($("#ai-custom-key")) $("#ai-custom-key").value = "";
+          window.closeCustomProviderModal();
           
           // Auto-select newly added provider
           localStorage.setItem("ghostwaiter:custom_active_id", id);
@@ -2376,6 +2363,17 @@ function bindEvents() {
         customLoadBtn.textContent = editingProviderId ? "Verify & Update" : "Verify & Add";
       }
     };
+  }
+
+  // Setup click listeners for new custom provider modal buttons
+  if ($("#open-add-provider-btn")) {
+    $("#open-add-provider-btn").onclick = () => {
+      cancelEditingProvider();
+      window.openCustomProviderModal();
+    };
+  }
+  if ($("#custom-provider-cancel")) {
+    $("#custom-provider-cancel").onclick = window.closeCustomProviderModal;
   }
 
   $("#workspace-button").onclick = window.showWorkspaceModal;
@@ -2433,6 +2431,9 @@ function bindEvents() {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         attachMenu.classList.add("hidden");
+        if (window.closeCustomProviderModal && !$("#custom-provider-modal").classList.contains("hidden")) {
+          window.closeCustomProviderModal();
+        }
       }
     });
   }
@@ -2689,6 +2690,15 @@ function bindEvents() {
     };
   }
 
+  const customProviderModal = $("#custom-provider-modal");
+  if (customProviderModal) {
+    customProviderModal.onclick = (e) => {
+      if (e.target === customProviderModal) {
+        window.closeCustomProviderModal();
+      }
+    };
+  }
+
   // Sidebar click dismisses open modals (using capturing phase to intercept nav buttons/actions)
   const sidebar = $("#sidebar");
   if (sidebar) {
@@ -2709,6 +2719,11 @@ function bindEvents() {
         e.stopPropagation();
         e.preventDefault();
         $("#data-cancel").click();
+      } else if (!$("#custom-provider-modal").classList.contains("hidden")) {
+        modalActive = true;
+        e.stopPropagation();
+        e.preventDefault();
+        window.closeCustomProviderModal();
       } else if (!$("#ai-modal").classList.contains("hidden")) {
         modalActive = true;
         e.stopPropagation();

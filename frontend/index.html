@@ -590,38 +590,12 @@
         </div>
 
         <div id="ai-tab-custom" class="ai-tab-content hidden">
-          <!-- Custom AI Manager form -->
-          <div style="display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-hover);">
-            <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Add AI Provider</div>
-            
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <label style="font-size: 0.7rem; font-weight: 600; color: var(--text-secondary);">Endpoint URL</label>
-              <input id="ai-custom-endpoint" type="text" placeholder="https://api.example.com/v1" autocomplete="off" style="width: 100%;">
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <label style="font-size: 0.7rem; font-weight: 600; color: var(--text-secondary);">API Key</label>
-              <input id="ai-custom-key" type="password" placeholder="API Key" autocomplete="off" style="width: 100%;">
-            </div>
-
-            <!-- API Type Selection -->
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <label style="font-size: 0.7rem; font-weight: 600; color: var(--text-secondary);">API Type</label>
-              <div style="display: flex; gap: 8px;">
-                <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; font-size: 13px; font-weight: 600; background: var(--bg-surface); color: var(--text-secondary); transition: all 0.2s; user-select: none;" id="label-type-openai">
-                  <input type="radio" name="manager-api-type" value="openai" checked style="accent-color: var(--accent); margin: 0; cursor: pointer;">
-                  OpenAI Compatible
-                </label>
-                <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; font-size: 13px; font-weight: 600; background: var(--bg-surface); color: var(--text-secondary); transition: all 0.2s; user-select: none;" id="label-type-anthropic">
-                  <input type="radio" name="manager-api-type" value="anthropic" style="accent-color: var(--accent); margin: 0; cursor: pointer;">
-                  Anthropic Compatible
-                </label>
-              </div>
-            </div>
-
-            <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
-              <button id="custom-load-btn" class="button primary compact" type="button" style="padding: 0 20px; height: 42px; width: 100%; justify-content: center;">Verify &amp; Add</button>
-            </div>
+          <!-- Button to open Add Provider Modal -->
+          <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+            <button id="open-add-provider-btn" class="button primary" style="width: 100%; justify-content: center; height: 42px;" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 6px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add AI Provider
+            </button>
           </div>
 
           <!-- Saved custom providers list -->
@@ -639,6 +613,49 @@
       <div class="dialog-actions" style="justify-content: flex-end; gap: 8px; margin-top: auto; border-top: 1px solid var(--border); padding-top: 16px;">
         <button id="ai-settings-close" class="button compact" type="button" style="min-width: 100px;">Cancel</button>
         <button id="ai-settings-save" class="button primary compact" type="button" style="min-width: 100px;">Save</button>
+      </div>
+    </div>
+  </div>
+  <!-- Custom AI Provider Dialog (Add/Edit) -->
+  <div id="custom-provider-modal" class="backdrop modal-overlay hidden">
+    <div class="dialog-card" style="max-width: 440px; width: 90%; padding: 24px; display: flex; flex-direction: column;">
+      <h3 id="custom-provider-modal-title" style="margin: 0 0 4px 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">Add AI Provider</h3>
+      <p style="margin-bottom: 20px; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.45;">Configure a custom OpenAI or Anthropic compatible API connection.</p>
+      
+      <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 24px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Provider Name <span style="font-weight: normal; text-transform: none; color: var(--text-muted);">(Optional)</span></label>
+          <input id="ai-manager-name" type="text" placeholder="e.g. My Custom LLM" autocomplete="off" style="width: 100%;">
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Endpoint URL</label>
+          <input id="ai-custom-endpoint" type="text" placeholder="https://api.example.com/v1" autocomplete="off" style="width: 100%;">
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">API Key</label>
+          <input id="ai-custom-key" type="password" placeholder="Enter API Key" autocomplete="off" style="width: 100%;">
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">API Type</label>
+          <div style="display: flex; gap: 8px;">
+            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; font-size: 13px; font-weight: 600; background: var(--bg-surface); color: var(--text-secondary); transition: all 0.2s; user-select: none;" id="label-type-openai">
+              <input type="radio" name="manager-api-type" value="openai" checked style="accent-color: var(--accent); margin: 0; cursor: pointer;">
+              OpenAI Compatible
+            </label>
+            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; font-size: 13px; font-weight: 600; background: var(--bg-surface); color: var(--text-secondary); transition: all 0.2s; user-select: none;" id="label-type-anthropic">
+              <input type="radio" name="manager-api-type" value="anthropic" style="accent-color: var(--accent); margin: 0; cursor: pointer;">
+              Anthropic Compatible
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="dialog-actions" style="justify-content: flex-end; gap: 8px;">
+        <button id="custom-provider-cancel" class="button compact" type="button" style="min-width: 100px;">Cancel</button>
+        <button id="custom-load-btn" class="button primary compact" type="button" style="min-width: 120px; justify-content: center;">Verify &amp; Add</button>
       </div>
     </div>
   </div>

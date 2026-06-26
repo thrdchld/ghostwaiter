@@ -3068,4 +3068,14 @@ pre,
   color: var(--text-secondary);
 }
 
-
+/* ─── Sidebar-Aware Modal Offsetting (Desktop Only) ─────────────────────── */
+@media (min-width: 781px) {
+  .modal-overlay {
+    box-sizing: border-box;
+    padding-left: var(--sidebar-width);
+    transition: padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .app-shell.sidebar-minimized ~ .modal-overlay {
+    padding-left: 76px;
+  }
+}
