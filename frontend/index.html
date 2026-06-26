@@ -541,7 +541,7 @@
   </div>
 
   <div id="ai-modal" class="backdrop modal-overlay hidden">
-    <div class="dialog-card" style="max-width: 480px; width: 90%; padding: 24px; display: flex; flex-direction: column; min-height: 520px;">
+    <div class="dialog-card" style="max-width: 480px; width: 90%; padding: 24px; display: flex; flex-direction: column; min-height: 520px; max-height: 90vh;">
       <h3 style="margin: 0 0 4px 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">AI Settings</h3>
       <p style="margin-bottom: 16px; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.45;">Configure your provider connection and select active models.</p>
       
@@ -555,6 +555,12 @@
         
         <!-- ── Tab 1: Provider & Model ── -->
         <div id="ai-tab-provider-model" class="ai-tab-content">
+          <!-- Active Model Display at the top -->
+          <div style="font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px;">
+            <span>Active Model:</span>
+            <strong id="active-model-display" style="color: var(--accent); font-weight: 700;">None</strong>
+          </div>
+
           <!-- Provider dropdown -->
           <div style="display: flex; flex-direction: column; gap: 6px;">
             <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">AI Provider</label>
@@ -572,19 +578,16 @@
             </select>
           </div>
 
-          <!-- Model selection browser -->
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <div style="font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--border);">
-              <span>Active Model:</span>
-              <strong id="active-model-display" style="color: var(--accent); font-weight: 700;">None</strong>
-            </div>
+          <!-- Check Available Models Button wrapper -->
+          <div id="check-models-wrapper" style="margin-top: 14px; display: none;">
+            <button id="check-models-btn" class="button secondary" style="width: 100%; justify-content: center; height: 42px;" type="button">Check Available Models</button>
+          </div>
 
-            <!-- Model search and list -->
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <input type="text" id="model-search" placeholder="Search models..." style="width: 100%;">
-              <div id="models-list" style="display: grid; gap: 8px; max-height: 220px; overflow-y: auto; padding-right: 4px;">
-                <!-- Populated by JS -->
-              </div>
+          <!-- Model selection container (hidden by default) -->
+          <div id="model-selection-container" class="hidden" style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+            <input type="text" id="model-search" placeholder="Search models..." style="width: 100%;">
+            <div id="models-list" style="display: grid; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 4px;">
+              <!-- Populated by JS -->
             </div>
           </div>
         </div>
@@ -605,9 +608,7 @@
               <!-- Populated by JS -->
             </div>
           </div>
-          </div>
         </div>
-
       </div>
       
       <div class="dialog-actions" style="justify-content: flex-end; gap: 8px; margin-top: auto; border-top: 1px solid var(--border); padding-top: 16px;">

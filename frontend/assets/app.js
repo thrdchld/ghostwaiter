@@ -359,7 +359,16 @@ window.selectCustomProvider = function(id) {
   
   renderCustomProviders();
   populateProvidersDropdown();
-  loadModelsForProvider(id);
+  
+  const modelSelContainer = $("#model-selection-container");
+  if (modelSelContainer) modelSelContainer.classList.add("hidden");
+  
+  const checkModelsWrapper = $("#check-models-wrapper");
+  if (checkModelsWrapper) checkModelsWrapper.style.display = "block";
+  
+  const modelsList = $("#models-list");
+  if (modelsList) modelsList.innerHTML = "";
+  
   updateModelIndicator();
 };
 
@@ -2211,11 +2220,41 @@ function bindEvents() {
   // Restore saved state
   const savedProviderId = localStorage.getItem("ghostwaiter:custom_active_id") || "";
   populateProvidersDropdown();
-  if (savedProviderId) {
-    loadModelsForProvider(savedProviderId);
+  
+  const modelSelContainer = $("#model-selection-container");
+  if (modelSelContainer) modelSelContainer.classList.add("hidden");
+  
+  const checkModelsWrapper = $("#check-models-wrapper");
+  if (checkModelsWrapper) {
+    if (savedProviderId) {
+      checkModelsWrapper.style.display = "block";
+    } else {
+      checkModelsWrapper.style.display = "none";
+    }
   }
+  
   const savedModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
   if (orModelDisplay) orModelDisplay.textContent = savedModel || "None";
+
+  // Setup check models button listener
+  const checkModelsBtn = $("#check-models-btn");
+  if (checkModelsBtn) {
+    checkModelsBtn.onclick = async () => {
+      const activeId = localStorage.getItem("ghostwaiter:custom_active_id");
+      if (!activeId) {
+        toast("Please select a provider first", "error");
+        return;
+      }
+      
+      const checkModelsWrapper = $("#check-models-wrapper");
+      if (checkModelsWrapper) checkModelsWrapper.style.display = "none";
+      
+      const modelSelContainer = $("#model-selection-container");
+      if (modelSelContainer) modelSelContainer.classList.remove("hidden");
+      
+      await window.loadModelsForProvider(activeId);
+    };
+  }
   
   // Custom Dropdown Trigger and Option events
   const aiProviderTrigger = $("#ai-provider-trigger");
@@ -2348,10 +2387,17 @@ function bindEvents() {
         renderCustomProviders();
         populateProvidersDropdown();
         
-        // Load models for the selected provider
+        // Reset models list and show check button for the active provider
         const activeId = localStorage.getItem("ghostwaiter:custom_active_id");
         if (activeId) {
-          loadModelsForProvider(activeId);
+          const modelSelContainer = $("#model-selection-container");
+          if (modelSelContainer) modelSelContainer.classList.add("hidden");
+          
+          const checkModelsWrapper = $("#check-models-wrapper");
+          if (checkModelsWrapper) checkModelsWrapper.style.display = "block";
+          
+          const modelsList = $("#models-list");
+          if (modelsList) modelsList.innerHTML = "";
         }
         
         updateModelIndicator();
@@ -2638,9 +2684,20 @@ function bindEvents() {
     if (providerModelTab) providerModelTab.click();
     
     populateProvidersDropdown();
-    if (initialCustomActiveId) {
-      loadModelsForProvider(initialCustomActiveId);
+    const modelSelContainer = $("#model-selection-container");
+    if (modelSelContainer) modelSelContainer.classList.add("hidden");
+    
+    const checkModelsWrapper = $("#check-models-wrapper");
+    if (checkModelsWrapper) {
+      if (initialCustomActiveId) {
+        checkModelsWrapper.style.display = "block";
+      } else {
+        checkModelsWrapper.style.display = "none";
+      }
     }
+    
+    const modelsList = $("#models-list");
+    if (modelsList) modelsList.innerHTML = "";
     
     renderCustomProviders();
     $("#ai-modal").classList.remove("hidden");
@@ -2715,6 +2772,10 @@ function bindEvents() {
   const sidebar = $("#sidebar");
   if (sidebar) {
     sidebar.addEventListener("click", async (e) => {
+      const navItem = e.target.closest(".nav-item");
+      if (!navItem || navItem.id === "theme-button") {
+        return;
+      }
       let modalActive = false;
       if (!$("#confirm-modal").classList.contains("hidden")) {
         modalActive = true;
