@@ -220,13 +220,109 @@ function updateEmptyStateVisibility() {
 
 function toggleCustomEndpointView(provider) {
   const container = $("#custom-endpoint-container");
-  if (container) {
-    if (provider === "custom") {
-      container.classList.remove("hidden");
-    } else {
-      container.classList.add("hidden");
-    }
+  const panel = $("#custom-providers-panel");
+  const isCustom = provider === "custom";
+  if (container) container.classList.toggle("hidden", !isCustom);
+  if (panel) panel.classList.toggle("hidden", !isCustom);
+  if (isCustom) renderCustomProviders();
+}
+
+// ── Custom Providers CRUD ────────────────────────────────────────────────
+function getCustomProviders() {
+  try {
+    return JSON.parse(localStorage.getItem("ghostwaiter:custom_providers") || "[]");
+  } catch { return []; }
+}
+
+function saveCustomProviders(list) {
+  localStorage.setItem("ghostwaiter:custom_providers", JSON.stringify(list));
+}
+
+function renderCustomProviders() {
+  const listEl = $("#custom-providers-list");
+  if (!listEl) return;
+  const providers = getCustomProviders();
+  const activeId = localStorage.getItem("ghostwaiter:custom_active_id") || "";
+
+  if (!providers.length) {
+    listEl.innerHTML = "";
+    return;
   }
+
+  listEl.innerHTML = providers.map(p => {
+    const isActive = p.id === activeId;
+    return `
+    <div class="cpanel-item${isActive ? " active-provider" : "}" data-cpid="${p.id}">
+      <span class="cpanel-item-dot"></span>
+      <div class="cpanel-item-info">
+        <div class="cpanel-item-name">${escapeHtml(p.name)}</div>
+        <div class="cpanel-item-url">${escapeHtml(p.endpoint)}</div>
+      </div>
+      <div class="cpanel-item-actions">
+        <button class="cpanel-load-btn" onclick="loadCustomProvider('${p.id}')" type="button">${isActive ? "Active" : "Load"}</button>
+        <button class="cpanel-action-btn" title="Rename" onclick="renameCustomProvider('${p.id}')" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="cpanel-action-btn danger" title="Delete" onclick="deleteCustomProvider('${p.id}')" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+window.loadCustomProvider = function(id) {
+  const providers = getCustomProviders();
+  const p = providers.find(x => x.id === id);
+  if (!p) return;
+  localStorage.setItem("ghostwaiter:custom_active_id", id);
+  localStorage.setItem("ghostwaiter:custom_endpoint", p.endpoint);
+  localStorage.setItem("ghostwaiter:key_custom", p.key || "");
+  const endpointInput = $("#ai-custom-endpoint");
+  const apiKeyInput = $("#ai-api-key");
+  if (endpointInput) endpointInput.value = p.endpoint;
+  if (apiKeyInput) apiKeyInput.value = p.key || "";
+  renderCustomProviders();
+  updateModelIndicator();
+  toast(`Loaded: ${p.name}`, "success");
+};
+
+window.renameCustomProvider = async function(id) {
+  const providers = getCustomProviders();
+  const p = providers.find(x => x.id === id);
+  if (!p) return;
+  const newName = await showPrompt("Rename provider:", p.name);
+  if (!newName || !newName.trim()) return;
+  p.name = newName.trim();
+  saveCustomProviders(providers);
+  renderCustomProviders();
+  saveAIConfigToSupabase();
+};
+
+window.deleteCustomProvider = async function(id) {
+  if (!(await showConfirm("Delete this custom provider? This cannot be undone."))) return;
+  let providers = getCustomProviders();
+  providers = providers.filter(x => x.id !== id);
+  saveCustomProviders(providers);
+  // Clear active if it was this one
+  if (localStorage.getItem("ghostwaiter:custom_active_id") === id) {
+    localStorage.removeItem("ghostwaiter:custom_active_id");
+  }
+  renderCustomProviders();
+  saveAIConfigToSupabase();
+  toast("Provider deleted");
+};
+
+function addCustomProvider(name, endpoint, key) {
+  if (!name.trim() || !endpoint.trim()) return false;
+  const providers = getCustomProviders();
+  const id = `cp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  providers.push({ id, name: name.trim(), endpoint: endpoint.trim(), key: key || "" });
+  saveCustomProviders(providers);
+  localStorage.setItem("ghostwaiter:custom_active_id", id);
+  localStorage.setItem("ghostwaiter:custom_endpoint", endpoint.trim());
+  localStorage.setItem("ghostwaiter:key_custom", key || "");
+  return id;
 }
 
 async function syncAIConfigFromSupabase() {
@@ -240,6 +336,12 @@ async function syncAIConfigFromSupabase() {
           if (key) {
             if (provider === "custom_endpoint") {
               localStorage.setItem("ghostwaiter:custom_endpoint", key);
+            } else if (provider === "custom_providers") {
+              // Only restore from DB if local is empty
+              const localList = localStorage.getItem("ghostwaiter:custom_providers");
+              if (!localList || localList === "[]") {
+                localStorage.setItem("ghostwaiter:custom_providers", key);
+              }
             } else {
               localStorage.setItem(`ghostwaiter:key_${provider}`, key);
               if (provider === "openrouter") {
@@ -292,6 +394,8 @@ async function saveAIConfigToSupabase() {
     kilo: localStorage.getItem("ghostwaiter:key_kilo") || "",
     custom: localStorage.getItem("ghostwaiter:key_custom") || "",
     custom_endpoint: localStorage.getItem("ghostwaiter:custom_endpoint") || "",
+    // Serialize custom providers list as JSON string so it travels through the existing keys map
+    custom_providers: localStorage.getItem("ghostwaiter:custom_providers") || "[]",
   };
   
   try {
@@ -2050,6 +2154,25 @@ function bindEvents() {
     }
   };
 
+  // ── Custom Provider Save button ─────────────────────────────────────────
+  const cpanelSaveBtn = $("#cpanel-save-btn");
+  if (cpanelSaveBtn) {
+    cpanelSaveBtn.onclick = () => {
+      const nameVal = ($("#cpanel-name-input")?.value || "").trim();
+      const endpointVal = ($("#ai-custom-endpoint")?.value || "").trim();
+      const keyVal = ($("#ai-api-key")?.value || "").trim();
+      if (!nameVal) return toast("Enter a name for this provider", "error");
+      if (!endpointVal) return toast("Enter an endpoint URL first", "error");
+      const id = addCustomProvider(nameVal, endpointVal, keyVal);
+      if (id) {
+        if ($("#cpanel-name-input")) $("#cpanel-name-input").value = "";
+        renderCustomProviders();
+        updateModelIndicator();
+        saveAIConfigToSupabase();
+        toast(`Saved: ${nameVal}`, "success");
+      }
+    };
+  }
 
   $("#workspace-button").onclick = showWorkspaceSheet;
   $("#sheet-close").onclick = closeSheet;
