@@ -3432,10 +3432,13 @@ function initNotesSystem() {
     expandNoteCreator();
   };
   
-  $("#note-pin-btn").onclick = () => {
-    creatorPinned = !creatorPinned;
-    $("#note-pin-btn").classList.toggle("active", creatorPinned);
-  };
+  const pinBtn = $("#note-pin-btn");
+  if (pinBtn) {
+    pinBtn.onclick = () => {
+      creatorPinned = !creatorPinned;
+      pinBtn.classList.toggle("active", creatorPinned);
+    };
+  }
   
   $("#note-upload-btn").onclick = () => {
     $("#note-file-input").click();
@@ -3555,7 +3558,10 @@ function collapseNoteCreator() {
   
   creatorPinned = false;
   creatorImage = null;
-  $("#note-pin-btn").classList.remove("active");
+  const pinBtn = $("#note-pin-btn");
+  if (pinBtn) {
+    pinBtn.classList.remove("active");
+  }
 }
 
 async function saveCurrentNoteFromCreator() {
