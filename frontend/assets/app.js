@@ -2316,6 +2316,7 @@ function bindEvents() {
   let initialProvider = "";
   let initialKeys = {};
   let initialModel = "";
+  let initialCustomActiveId = "";
 
   const hasAIChanges = () => {
     const currentProvider = localStorage.getItem("ghostwaiter:ai_provider") || "openrouter";
@@ -2329,6 +2330,8 @@ function bindEvents() {
     const currentEndpoint = localStorage.getItem("ghostwaiter:custom_endpoint") || "";
     const initialEndpoint = initialKeys.custom_endpoint || "";
     if (currentEndpoint !== initialEndpoint) return true;
+    const currentCustomActiveId = localStorage.getItem("ghostwaiter:custom_active_id") || "";
+    if (currentCustomActiveId !== initialCustomActiveId) return true;
     return false;
   };
 
@@ -2338,6 +2341,11 @@ function bindEvents() {
         // Restore initial values
         localStorage.setItem("ghostwaiter:ai_provider", initialProvider);
         localStorage.setItem("ghostwaiter:openrouter_model", initialModel);
+        if (initialCustomActiveId) {
+          localStorage.setItem("ghostwaiter:custom_active_id", initialCustomActiveId);
+        } else {
+          localStorage.removeItem("ghostwaiter:custom_active_id");
+        }
         for (const [p, val] of Object.entries(initialKeys)) {
           if (p === "custom_endpoint") {
             localStorage.setItem("ghostwaiter:custom_endpoint", val);
@@ -2382,6 +2390,7 @@ function bindEvents() {
   if ($("#ai-settings-button")) $("#ai-settings-button").onclick = () => {
     initialProvider = localStorage.getItem("ghostwaiter:ai_provider") || "openrouter";
     initialModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
+    initialCustomActiveId = localStorage.getItem("ghostwaiter:custom_active_id") || "";
     initialKeys = {
       openrouter: localStorage.getItem("ghostwaiter:key_openrouter") || localStorage.getItem("ghostwaiter:openrouter_key") || "",
       google: localStorage.getItem("ghostwaiter:key_google") || "",
@@ -2417,6 +2426,7 @@ function bindEvents() {
       await saveAIConfigToSupabase();
       initialProvider = localStorage.getItem("ghostwaiter:ai_provider") || "openrouter";
       initialModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
+      initialCustomActiveId = localStorage.getItem("ghostwaiter:custom_active_id") || "";
       initialKeys = {
         openrouter: localStorage.getItem("ghostwaiter:key_openrouter") || localStorage.getItem("ghostwaiter:openrouter_key") || "",
         google: localStorage.getItem("ghostwaiter:key_google") || "",
