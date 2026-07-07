@@ -1,45 +1,85 @@
+---
+title: Ghostwaiter
+emoji: ✍️
+colorFrom: red
+colorTo: pink
+sdk: docker
+app_port: 7860
+fullWidth: true
+pinned: false
+short_description: AI writing coach dengan memori
+tags:
+  - writing
+  - pwa
+  - fastapi
+  - inference-providers
+---
+
 # Ghostwaiter
 
-Ghostwaiter is a personal writing assistant, note-taking app, and style learning environment. It runs as a progressive web application (PWA) powered by a Python **FastAPI** backend and a static HTML/CSS/JS frontend.
+Ghostwaiter adalah aplikasi web penulisan personal yang menggabungkan fitur chat pintar, editor tulisan (Auto Writer), sistem pembelajaran gaya bahasa (Brain Center), dan pengelolaan catatan. 
 
-It stores application data in **Supabase** (with automatic fallback to a local directories if not configured) and integrates with **GitHub** for manual sync/backup workflows.
-
-This repository is ready to be hosted as a **Hugging Face Space** using the provided `Dockerfile`.
+Aplikasi ini berjalan sebagai satu halaman **PWA (Progressive Web App)** dengan backend **FastAPI** (Python) dan frontend statis (HTML/CSS/JS).
 
 ---
 
-## Features
+## Alur Penyimpanan Data (Storage)
 
-- **Multi-provider AI Support**: Configure API keys and choose models (Google Gemini, OpenRouter, Groq, DeepSeek, Mistral, etc.) directly from the UI.
-- **SSE Streaming**: Real-time response streaming for chat and document writing.
-- **Smart Chat Workspace**: Conversational interface with markdown rendering and automated `<think>` reasoning tag filtering.
-- **Auto Writer**: Paraphrase, rewrite, or generate drafts automatically based on customized writing guidelines.
-- **Notes Grid**: Organize thoughts with pinning, custom tags, and image attachments.
-- **Brain Center**: Automatically extracts and manages writing rules, style guides, memory nodes, and thinking patterns from writing samples and revisions.
-- **GitHub Sync**: Push and pull database states to a GitHub backup repository.
-
----
-
-## Configuration & Environment Variables
-
-To configure the application (especially when deploying to Hugging Face Spaces), set the following environment variables:
-
-| Name | Type | Required | Description |
-| :--- | :--- | :---: | :--- |
-| `SUPABASE_URL` | Variable | Yes | Your Supabase project URL (e.g., `https://your-proj.supabase.co`). |
-| `SUPABASE_KEY` | Secret | Yes | Your Supabase Project `anon` / `public` API key. |
-| `APP_PASSWORD` | Secret | No | Password for single-user authentication. If empty, authentication is disabled. |
-| `SESSION_SECRET` | Secret | No | Encryption secret key for session cookies. |
-| `GITHUB_TOKEN` | Secret | No | GitHub Personal Access Token for backup synchronization. |
-| `GITHUB_BACKUP_REPO` | Variable | No | Target GitHub repository for backups, in the format `owner/repo`. |
-| `TAVILY_API_KEY` | Secret | No | API key for web search reference support. |
-| `DATA_DIR` | Variable | No | Custom folder path for local fallback storage. Defaults to `./data`. |
+Aplikasi ini memiliki sistem penyimpanan hibrida:
+1. **Penyimpanan Supabase**: Jika variabel environment `SUPABASE_URL` dan `SUPABASE_KEY` diatur, aplikasi akan menyimpan seluruh data (workspaces, chats, drafts, notes) secara cloud di database Supabase Anda.
+2. **Penyimpanan Lokal (Local Fallback)**: Jika Supabase tidak dikonfigurasi, aplikasi akan otomatis menyimpan data secara lokal pada server/perangkat dalam folder `data/` dengan struktur:
+   ```text
+   data/
+     system/
+       settings.json
+       models.json
+       workspaces.json
+     workspaces/
+       <workspace_id>/
+         drafts/
+         chats/
+         brain/
+         references/
+         summary/
+         learning/
+         settings/
+   ```
 
 ---
 
-## Database Schema (Supabase)
+## Fitur Utama
 
-If you configure Supabase, you must run the following SQL script in your Supabase project's **SQL Editor** to initialize the three required tables:
+- **Inference Multi-Provider**: Pilih model AI langsung dari UI menggunakan API Key Anda sendiri (OpenRouter, Google Gemini, Groq, DeepSeek, Mistral, dll.).
+- **Streaming Response**: Chat dan penulisan teks (generate) berjalan secara streaming dengan filter otomatis untuk blok `<think>`.
+- **Auto Writer**: Menulis draf, menulis ulang (*rewrite*), atau parafrase teks otomatis sesuai gaya penulisan Anda.
+- **Notes Grid**: Catatan cepat terintegrasi dengan filter tag, penyematan (pin), dan unggah gambar.
+- **Brain Center**: Menyimpan aturan gaya bahasa (*style rules*), pola berpikir (*thinking patterns*), dan memori AI yang diekstraksi dari contoh tulisan Anda.
+- **GitHub Sync & Backup**: Sinkronisasi data manual (backup/restore) ke repositori GitHub Anda.
+- **Hugging Face Space & Docker Ready**: Aplikasi siap dideploy langsung ke Hugging Face Spaces menggunakan Docker.
+
+---
+
+## Konfigurasi Environment (Secrets & Variables)
+
+Atur variabel environment berikut di server lokal Anda (dalam file `.env`) atau di Secrets/Variables Hugging Face Space:
+
+| Nama Variabel | Jenis | Wajib | Keterangan |
+| :--- | :---: | :---: | :--- |
+| `SUPABASE_URL` | Variable | Tidak | URL proyek Supabase Anda (untuk cloud database). |
+| `SUPABASE_KEY` | Secret | Tidak | Kunci API `anon` / `public` Supabase Anda. |
+| `APP_PASSWORD` | Secret | Tidak | Password masuk aplikasi. Jika diisi, halaman login akan aktif. |
+| `SESSION_SECRET` | Secret | Tidak | Secret key untuk session cookie. |
+| `GITHUB_TOKEN` | Secret | Tidak | Token GitHub untuk kebutuhan sinkronisasi backup repositori. |
+| `GITHUB_BACKUP_REPO` | Variable | Tidak | Repositori tujuan backup di GitHub, format: `owner/repo`. |
+| `TAVILY_API_KEY` | Secret | Tidak | Kunci API Tavily untuk mendukung fitur pencarian referensi web. |
+| `SYNC_DEBOUNCE_SECONDS` | Variable | Tidak | Delay otomatisasi sinkronisasi (default: `45` detik). |
+| `DATA_DIR` | Variable | Tidak | Lokasi folder penyimpanan lokal jika tidak menggunakan Supabase. |
+
+---
+
+## Skema Database Supabase
+
+Jika menggunakan Supabase, pastikan Anda menjalankan skrip berikut di **SQL Editor** pada dasbor Supabase Anda untuk membuat tabel yang dibutuhkan:
 
 ```sql
 -- 1. Create Workspaces Table
@@ -69,31 +109,36 @@ CREATE TABLE IF NOT EXISTS public.drafts (
 
 ---
 
-## Running Locally
+## Menjalankan Server Lokal
 
-Follow these instructions to run the application server locally on your machine:
-
-### Installation
-1. Ensure Python 3.10+ is installed.
-2. Clone the repository and navigate to its root directory.
-3. Create a virtual environment and install the dependencies:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows, use: .venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-### Execution
-Run the development server using `uvicorn`:
-```bash
+### Windows (PowerShell)
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+# Buat file .env dan isi variabel yang dibutuhkan
 uvicorn app:app --reload --port 7860
 ```
-Open your browser and navigate to `http://localhost:7860` to access the application.
 
----
+### Ubuntu / Debian
+```bash
+sudo apt update
+sudo apt install python3-venv python3-pip
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# Buat file .env dan isi variabel yang dibutuhkan
+uvicorn app:app --reload --port 7860
+```
 
-## Architecture Overview
-
-- **Backend**: FastAPI (`app.py` -> `backend/main.py`) provides REST API endpoints, session security, proxy streaming for AI APIs, and database orchestration.
-- **Frontend**: Clean static assets (`frontend/index.html` -> CSS/JS) styled using CSS and client logic.
-- **Storage**: Maps files or database rows per workspace using `SupabaseStore` (defined in `backend/storage.py`), which falls back automatically to local JSON files if Supabase is offline or not configured.
+### Termux (Android)
+```bash
+pkg update && pkg upgrade
+pkg install python binutils
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# Buat file .env dan isi variabel yang dibutuhkan
+uvicorn app:app --reload --port 7860
+```
+Buka browser Anda dan akses halaman di `http://localhost:7860`.
