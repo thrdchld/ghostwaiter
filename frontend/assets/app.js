@@ -809,15 +809,19 @@ function saveCustomProviders(list) {
 async function loadAIProvidersFromSupabase() {
   try {
     const remote = await supabaseQueryClient("workspaces", "id=eq.__system__");
-    if (remote && remote.length && remote[0].data?.custom_providers) {
-      const remoteList = remote[0].data.custom_providers;
-      localStorage.setItem("ghostwaiter:custom_providers", JSON.stringify(remoteList));
-      if (remote[0].data.active_provider_id) {
-        localStorage.setItem("ghostwaiter:custom_active_id", remote[0].data.active_provider_id);
+    if (remote && remote.length && remote[0].data) {
+      const data = remote[0].data;
+      if (data.custom_providers) {
+        localStorage.setItem("ghostwaiter:custom_providers", JSON.stringify(data.custom_providers));
       }
-      if (remote[0].data.active_model) {
-        localStorage.setItem("ghostwaiter:openrouter_model", remote[0].data.active_model);
+      if (data.active_provider_id) {
+        localStorage.setItem("ghostwaiter:custom_active_id", data.active_provider_id);
+        localStorage.setItem("ghostwaiter:ai_provider", "custom");
       }
+      if (data.active_model) {
+        localStorage.setItem("ghostwaiter:openrouter_model", data.active_model);
+      }
+      updateModelIndicator();
     }
   } catch (e) {
     console.warn("Could not load AI providers from Supabase:", e);
@@ -4262,8 +4266,16 @@ function initNotesSystem() {
     };
   }
   
+  const collapsedCreate = $("#note-creator-collapsed-create");
+  if (collapsedCreate) {
+    collapsedCreate.onclick = (e) => {
+      if (e.target.closest("button")) return;
+      e.stopPropagation();
+      expandNoteCreator();
+    };
+  }
+  
   collapsed.onclick = (e) => {
-    if (!rowSearch.classList.contains("hidden")) return;
     if (e.target.closest("button")) return;
     e.stopPropagation();
     expandNoteCreator();
