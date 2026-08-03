@@ -13,3 +13,9 @@ class TestConnectionRequest(BaseModel):
     model: str | None = None
     custom_endpoint: str | None = None
     custom_api_type: str | None = None
+
+class AIConfigRequest(BaseModel):
+    provider: str = ""
+    model: str = ""
+    keys: dict[str, str] = {}
+

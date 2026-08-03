@@ -61,9 +61,9 @@ def login(req: LoginRequest, response: Response) -> dict[str, Any]:
         samesite="lax",
         max_age=60 * 60 * 24 * 30,
     )
-    return {"status": "ok", "session_token": token}
+    return {"status": "success", "session_token": token}
 
 @router.post("/logout")
 def logout(response: Response) -> dict[str, str]:
     response.delete_cookie("gw_session")
-    return {"status": "ok"}
+    return {"status": "success"}

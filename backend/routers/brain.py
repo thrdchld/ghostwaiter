@@ -90,12 +90,24 @@ def delete_brain_item(req: BrainItemDeleteRequest) -> dict[str, Any]:
     if req.type == "style":
         path = brain / "style_profile.json"
         data = store.read_json(path)
-        data["rules"] = [r for r in data.get("rules", []) if r != req.id_or_content]
+        rules = data.get("rules", [])
+        data["rules"] = [r for r in rules if r != req.id_or_content]
         store.write_json(path, data)
+
+        rules_path = brain / "rules.json"
+        rules_data = store.read_json(rules_path)
+        items = rules_data.get("items", [])
+        rules_data["items"] = [
+            i for i in items
+            if not (isinstance(i, dict) and (i.get("id") == req.id_or_content or i.get("content") == req.id_or_content))
+            and i != req.id_or_content
+        ]
+        store.write_json(rules_path, rules_data)
     elif req.type == "thinking":
         path = brain / "thinking_profile.json"
         data = store.read_json(path)
-        data["patterns"] = [p for p in data.get("patterns", []) if p != req.id_or_content]
+        patterns = data.get("patterns", [])
+        data["patterns"] = [p for p in patterns if p != req.id_or_content]
         store.write_json(path, data)
     elif req.type == "memory":
         path = brain / "conversation_memory.json"
@@ -120,6 +132,67 @@ def list_proposals(
     if status != "all":
         items = [i for i in items if i.get("status", "pending") == status]
     return {"items": items}
+
+@router.post("/proposals/approve", dependencies=[Depends(require_auth)])
+def approve_proposal(req: LearningProposalRequest) -> dict[str, Any]:
+    ws = workspace_id(req.workspace_id)
+    brain = store.workspace_path(ws) / "brain"
+    path = brain / "learning_proposals.json"
+    data = store.read_json(path)
+    items = data.get("items", [])
+    
+    target = None
+    for item in items:
+        if item.get("id") == req.proposal_id:
+            target = item
+            break
+            
+    if not target:
+        raise error("Proposal not found", 404)
+        
+    target["status"] = "approved"
+    if req.content:
+        target["content"] = req.content
+    target["updated_at"] = now_iso()
+    
+    style_path = brain / "style_profile.json"
+    thinking_path = brain / "thinking_profile.json"
+    style_data = store.read_json(style_path)
+    thinking_data = store.read_json(thinking_path)
+    
+    content = target.get("content", "").strip()
+    if content:
+        if target.get("type") == "style":
+            style_data["rules"] = list(dict.fromkeys(style_data.get("rules", []) + [content]))
+            store.write_json(style_path, style_data)
+        elif target.get("type") == "thinking":
+            thinking_data["patterns"] = list(dict.fromkeys(thinking_data.get("patterns", []) + [content]))
+            store.write_json(thinking_path, thinking_data)
+            
+    store.write_json(path, data)
+    return {"status": "success", "proposal": target, "item": target}
+
+@router.post("/proposals/reject", dependencies=[Depends(require_auth)])
+def reject_proposal(req: LearningProposalRequest) -> dict[str, Any]:
+    ws = workspace_id(req.workspace_id)
+    brain = store.workspace_path(ws) / "brain"
+    path = brain / "learning_proposals.json"
+    data = store.read_json(path)
+    items = data.get("items", [])
+    
+    target = None
+    for item in items:
+        if item.get("id") == req.proposal_id:
+            target = item
+            break
+            
+    if not target:
+        raise error("Proposal not found", 404)
+        
+    target["status"] = "rejected"
+    target["updated_at"] = now_iso()
+    store.write_json(path, data)
+    return {"status": "success", "proposal": target, "item": target}
 
 @router.post("/proposals/bulk", dependencies=[Depends(require_auth)])
 def bulk_proposals(req: ProposalBulkRequest) -> dict[str, Any]:

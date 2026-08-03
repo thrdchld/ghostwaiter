@@ -30,7 +30,7 @@ from .brain import (
     CommitRevisionRequest,
     RawWritingRequest,
 )
-from .ai import GenerateRequest, TestConnectionRequest
+from .ai import GenerateRequest, TestConnectionRequest, AIConfigRequest
 
 __all__ = [
     "LoginRequest",
@@ -57,4 +57,5 @@ __all__ = [
     "RawWritingRequest",
     "GenerateRequest",
     "TestConnectionRequest",
+    "AIConfigRequest",
 ]

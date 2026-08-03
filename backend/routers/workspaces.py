@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any
 from fastapi import APIRouter, HTTPException, Depends
 from backend.storage import store, safe_id, DEFAULT_WORKSPACE_ID, DEFAULT_WORKSPACE_NAME
+from backend.helpers import require_auth, error
 from backend.schemas import (
     WorkspaceRequest,
     WorkspaceCreateRequest,
@@ -11,11 +12,11 @@ from backend.schemas import (
 
 router = APIRouter(prefix="/api/workspace", tags=["workspace"])
 
-@router.get("/list")
+@router.get("/list", dependencies=[Depends(require_auth)])
 def list_workspaces() -> dict[str, Any]:
     return {"items": store.list_workspaces()}
 
-@router.get("/current")
+@router.get("/current", dependencies=[Depends(require_auth)])
 def get_current_workspace() -> dict[str, Any]:
     active_id = store.active_workspace()
     items = store.list_workspaces()
@@ -24,31 +25,37 @@ def get_current_workspace() -> dict[str, Any]:
             return ws
     return {"id": DEFAULT_WORKSPACE_ID, "name": DEFAULT_WORKSPACE_NAME}
 
-@router.post("/switch")
+@router.post("/switch", dependencies=[Depends(require_auth)])
 def switch_workspace(req: WorkspaceRequest) -> dict[str, Any]:
     safe_id(req.workspace_id, "workspace_id")
-    current = store.switch_workspace(req.workspace_id)
-    return {"status": "ok", "current": current}
+    try:
+        store.set_active_workspace(req.workspace_id)
+        return {"status": "success", "workspace_id": req.workspace_id}
+    except (ValueError, KeyError) as exc:
+        raise error(str(exc), 404) from exc
 
-@router.post("/create")
+@router.post("/create", dependencies=[Depends(require_auth)])
 def create_workspace(req: WorkspaceCreateRequest) -> dict[str, Any]:
-    ws = store.create_workspace(req.name.strip())
-    return {"status": "ok", "workspace": ws}
+    try:
+        ws = store.create_workspace(req.name.strip())
+        return {"status": "success", "workspace": ws}
+    except ValueError as exc:
+        raise error(str(exc)) from exc
 
-@router.post("/rename")
+@router.post("/rename", dependencies=[Depends(require_auth)])
 def rename_workspace(req: WorkspaceRenameRequest) -> dict[str, Any]:
     safe_id(req.workspace_id, "workspace_id")
     try:
         ws = store.rename_workspace(req.workspace_id, req.name.strip())
-        return {"status": "ok", "workspace": ws}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return {"status": "success", "workspace": ws}
+    except (ValueError, KeyError) as exc:
+        raise error(str(exc), 404) from exc
 
-@router.post("/delete")
+@router.post("/delete", dependencies=[Depends(require_auth)])
 def delete_workspace(req: WorkspaceDeleteRequest) -> dict[str, Any]:
     safe_id(req.workspace_id, "workspace_id")
     try:
         store.delete_workspace(req.workspace_id)
-        return {"status": "ok", "active_workspace": store.active_workspace()}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return {"status": "success"}
+    except (ValueError, KeyError) as exc:
+        raise error(str(exc), 404) from exc
