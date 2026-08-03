@@ -1922,8 +1922,8 @@ async function loadSyncStatus() {
   if (!pill) return;
   if (pill.classList.contains("syncing") || pill.classList.contains("success-anim") || pill.classList.contains("failure-anim")) return;
 
-  const clientUrl = localStorage.getItem("ghostwaiter:supabase_url") || "";
-  const clientKey = localStorage.getItem("ghostwaiter:supabase_key") || "";
+  const clientUrl = localStorage.getItem("ghostwaiter:supabase_url") || window.__ENV__?.SUPABASE_URL || "";
+  const clientKey = localStorage.getItem("ghostwaiter:supabase_key") || window.__ENV__?.SUPABASE_KEY || "";
 
   if (clientUrl && clientKey) {
     try {

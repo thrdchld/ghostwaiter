@@ -24,6 +24,15 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Generate Runtime Env from GitHub Secrets
+        run: |
+          cat << EOF > frontend/assets/js/env.js
+          window.__ENV__ = {
+            SUPABASE_URL: "${{ secrets.SUPABASE_URL }}",
+            SUPABASE_KEY: "${{ secrets.SUPABASE_KEY }}"
+          };
+          EOF
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
