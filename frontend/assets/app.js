@@ -89,42 +89,394 @@ window.changeLanguage = async function(lang) {
   toast("Language changed");
 };
 
-async function api(path, options = {}) {
-  const config = {...options, credentials: "same-origin", headers: {...(options.headers || {})}};
-  if (state.sessionToken) config.headers.Authorization = `Bearer ${state.sessionToken}`;
-  
+function makeJsonResponse(data, status = 200, extraHeaders = {}) {
+  const headers = new Headers({ "Content-Type": "application/json", ...extraHeaders });
+  return new Response(JSON.stringify(data), { status, headers });
+}
+
+function getLocalEntity(key, defaultVal = null) {
+  try {
+    const raw = localStorage.getItem(`gw_db:${key}`);
+    return raw ? JSON.parse(raw) : defaultVal;
+  } catch (_) {
+    return defaultVal;
+  }
+}
+
+function saveLocalEntity(key, val) {
+  try {
+    localStorage.setItem(`gw_db:${key}`, JSON.stringify(val));
+  } catch (_) {}
+}
+
+function getSupabaseClientCredentials() {
+  const url = localStorage.getItem("ghostwaiter:supabase_url") || window.__ENV__?.SUPABASE_URL || "";
+  const key = localStorage.getItem("ghostwaiter:supabase_key") || window.__ENV__?.SUPABASE_KEY || "";
+  return { url: url.replace(/\/$/, ""), key };
+}
+
+async function supabaseQueryClient(table, queryParams = "") {
+  const { url, key } = getSupabaseClientCredentials();
+  if (!url || !key) return null;
+  try {
+    const res = await fetch(`${url}/rest/v1/${table}?${queryParams}`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` }
+    });
+    if (res.ok) return await res.json();
+  } catch (e) {
+    console.warn("Supabase query error:", e);
+  }
+  return null;
+}
+
+async function supabaseUpsertClient(table, payload) {
+  const { url, key } = getSupabaseClientCredentials();
+  if (!url || !key) return false;
+  try {
+    const res = await fetch(`${url}/rest/v1/${table}`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Prefer": "resolution=merge-duplicates",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn("Supabase upsert error:", e);
+    return false;
+  }
+}
+
+async function supabaseDeleteClient(table, idColumn, idVal) {
+  const { url, key } = getSupabaseClientCredentials();
+  if (!url || !key) return false;
+  try {
+    const res = await fetch(`${url}/rest/v1/${table}?${idColumn}=eq.${encodeURIComponent(idVal)}`, {
+      method: "DELETE",
+      headers: { apikey: key, Authorization: `Bearer ${key}` }
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn("Supabase delete error:", e);
+    return false;
+  }
+}
+
+async function handleClientSideChatSend(body, signal) {
+  const workspaceId = body.workspace_id || state.workspace || "personal";
+  let chatId = body.chat_id || `chat_${Date.now()}`;
+  const userMessage = body.message || "";
+  const attachments = body.attachments || [];
+
   const provider = localStorage.getItem("ghostwaiter:ai_provider") || "custom";
-  const key = localStorage.getItem(`ghostwaiter:key_${provider}`) || localStorage.getItem("ghostwaiter:openrouter_key") || "";
   const model = localStorage.getItem("ghostwaiter:openrouter_model") || "";
-  
-  if (!config.headers["X-AI-Provider"]) {
-    if (provider === "custom") {
-      const customEndpoint = localStorage.getItem("ghostwaiter:custom_endpoint") || "";
-      const customApiType = localStorage.getItem("ghostwaiter:custom_api_type") || "openai";
-      config.headers["X-AI-Provider"] = `custom|${customApiType}|${customEndpoint}`;
-    } else {
-      config.headers["X-AI-Provider"] = provider;
+  const key = localStorage.getItem(`ghostwaiter:key_${provider}`) || localStorage.getItem("ghostwaiter:openrouter_key") || localStorage.getItem("ghostwaiter:key_custom") || "";
+  const customEndpoint = localStorage.getItem("ghostwaiter:custom_endpoint") || "https://openrouter.ai/api/v1";
+
+  if (!model) {
+    throw new Error("Select an AI model in Settings first.");
+  }
+
+  let chatHistory = getLocalEntity(`chat:${chatId}`);
+  if (!chatHistory) {
+    const remoteChats = await supabaseQueryClient("chats", `id=eq.${encodeURIComponent(chatId)}`);
+    if (remoteChats && remoteChats.length) chatHistory = remoteChats[0].history;
+  }
+  if (!chatHistory) {
+    chatHistory = {
+      id: chatId,
+      workspace_id: workspaceId,
+      title: userMessage ? userMessage.slice(0, 60) : "Chat Baru",
+      messages: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  }
+
+  const userMsgObj = {
+    id: `msg_${Date.now()}_u`,
+    role: "user",
+    content: userMessage,
+    attachments,
+    created_at: new Date().toISOString()
+  };
+  chatHistory.messages.push(userMsgObj);
+  if (chatHistory.messages.length === 1 && userMessage) {
+    chatHistory.title = userMessage.slice(0, 60);
+  }
+  chatHistory.updated_at = new Date().toISOString();
+
+  saveLocalEntity(`chat:${chatId}`, chatHistory);
+  supabaseUpsertClient("chats", { id: chatId, history: chatHistory }).catch(() => {});
+
+  const apiMessages = [
+    { role: "system", content: "You are Ghostwaiter, a helpful personal AI assistant. Reply in clear markdown formatting. Be concise, precise, and polite." }
+  ];
+
+  const recentMsgs = chatHistory.messages.slice(-20);
+  for (const m of recentMsgs) {
+    if (m.role === "user" || m.role === "assistant") {
+      let text = m.content || "";
+      if (m.attachments && m.attachments.length) {
+        const attNames = m.attachments.map(a => a.name).join(", ");
+        text += `\n[Attachments: ${attNames}]`;
+      }
+      apiMessages.push({ role: m.role, content: text });
     }
   }
-  if (key && !config.headers["X-OpenRouter-Key"]) config.headers["X-OpenRouter-Key"] = key;
-  if (model && !config.headers["X-OpenRouter-Model"]) config.headers["X-OpenRouter-Model"] = model;
 
-  if (config.body && !(config.body instanceof FormData)) {
-    config.headers["Content-Type"] = "application/json";
-    if (typeof config.body !== "string") config.body = JSON.stringify(config.body);
-  }
-  const baseUrl = localStorage.getItem("ghostwaiter:api_base_url") || "";
-  const targetUrl = (path.startsWith("/") && baseUrl) ? baseUrl.replace(/\/$/, "") + path : path;
-  const response = await fetch(targetUrl, config);
-  if (!response.ok) {
-    let message = `Request failed (${response.status})`;
+  let targetEndpoint = customEndpoint.replace(/\/$/, "");
+  if (provider === "openrouter") targetEndpoint = "https://openrouter.ai/api/v1";
+  else if (provider === "groq") targetEndpoint = "https://api.groq.com/openai/v1";
+  else if (provider === "deepseek") targetEndpoint = "https://api.deepseek.com/v1";
+  else if (provider === "google") targetEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai";
+
+  const completionsUrl = targetEndpoint.endsWith("/chat/completions") ? targetEndpoint : `${targetEndpoint}/chat/completions`;
+
+  const headers = { "Content-Type": "application/json" };
+  if (key) headers["Authorization"] = `Bearer ${key}`;
+
+  const completionBody = JSON.stringify({
+    model: model,
+    messages: apiMessages,
+    stream: true,
+    max_tokens: 4096,
+    temperature: 0.7
+  });
+
+  const res = await fetch(completionsUrl, { method: "POST", headers, body: completionBody, signal });
+  if (!res.ok) {
+    const errText = await res.text();
+    let detail = `AI API Error (${res.status})`;
     try {
-      const data = await response.json();
-      message = data.message || data.detail?.message || data.detail || message;
+      const errJson = JSON.parse(errText);
+      detail = errJson.error?.message || errJson.message || detail;
     } catch (_) {}
-    const error = new Error(message);
-    error.status = response.status;
-    throw error;
+    throw new Error(detail);
+  }
+
+  const textEncoder = new TextEncoder();
+  const textDecoder = new TextDecoder();
+  let rawBuffer = "";
+  let fullAssistantText = "";
+
+  const transformStream = new TransformStream({
+    transform(chunk, controller) {
+      rawBuffer += textDecoder.decode(chunk, { stream: true });
+      const lines = rawBuffer.split("\n");
+      rawBuffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(":")) continue;
+        if (trimmed === "data: [DONE]") continue;
+        if (trimmed.startsWith("data: ")) {
+          try {
+            const json = JSON.parse(trimmed.slice(6));
+            let token = json.choices?.[0]?.delta?.content || json.choices?.[0]?.text || "";
+            if (token) {
+              fullAssistantText += token;
+              controller.enqueue(textEncoder.encode(token));
+            }
+          } catch (_) {}
+        }
+      }
+    },
+    flush() {
+      if (fullAssistantText) {
+        const assistantMsgObj = {
+          id: `msg_${Date.now()}_a`,
+          role: "assistant",
+          content: fullAssistantText,
+          created_at: new Date().toISOString()
+        };
+        chatHistory.messages.push(assistantMsgObj);
+        chatHistory.updated_at = new Date().toISOString();
+        saveLocalEntity(`chat:${chatId}`, chatHistory);
+        supabaseUpsertClient("chats", { id: chatId, history: chatHistory }).catch(() => {});
+      }
+    }
+  });
+
+  return new Response(res.body.pipeThrough(transformStream), {
+    status: 200,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "X-Chat-Id": chatId
+    }
+  });
+}
+
+async function handleClientSideApiRoute(path, options) {
+  const urlObj = new URL(path, window.location.href);
+  const pathname = urlObj.pathname;
+  const searchParams = urlObj.searchParams;
+  let body = {};
+  if (options.body) {
+    try {
+      body = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
+    } catch (_) {}
+  }
+
+  if (pathname === "/api/auth/status") {
+    const envUsername = window.__ENV__?.APP_USERNAME || "";
+    const envPassword = window.__ENV__?.APP_PASSWORD || "";
+    const isAuthRequired = Boolean(envUsername || envPassword);
+    const isAuthenticated = localStorage.getItem("ghostwaiter:authenticated") === "true";
+    return makeJsonResponse({ authenticated: !isAuthRequired || isAuthenticated, password_required: isAuthRequired });
+  }
+  if (pathname === "/api/auth/login") {
+    localStorage.setItem("ghostwaiter:authenticated", "true");
+    return makeJsonResponse({ status: "success", session_token: "client_session" });
+  }
+  if (pathname === "/api/auth/logout") {
+    localStorage.removeItem("ghostwaiter:authenticated");
+    return makeJsonResponse({ status: "success" });
+  }
+
+  if (pathname === "/api/chat/send") {
+    return handleClientSideChatSend(body, options.signal);
+  }
+  if (pathname === "/api/chat/list") {
+    const isArchived = searchParams.get("archived") === "true";
+    let remoteChats = await supabaseQueryClient("chats", "select=id,history");
+    let items = [];
+    if (remoteChats && Array.isArray(remoteChats)) {
+      items = remoteChats.map(c => c.history).filter(Boolean);
+    } else {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("gw_db:chat:")) {
+          const c = getLocalEntity(k.replace("gw_db:", ""));
+          if (c) items.push(c);
+        }
+      }
+    }
+    items = items.filter(c => Boolean(c.archived) === isArchived);
+    return makeJsonResponse({ items });
+  }
+  if (pathname.startsWith("/api/chat/session/")) {
+    const chatId = pathname.replace("/api/chat/session/", "");
+    let chatHistory = getLocalEntity(`chat:${chatId}`);
+    if (!chatHistory) {
+      const remote = await supabaseQueryClient("chats", `id=eq.${encodeURIComponent(chatId)}`);
+      if (remote && remote.length) chatHistory = remote[0].history;
+    }
+    if (!chatHistory) chatHistory = { id: chatId, title: "Chat Baru", messages: [] };
+    return makeJsonResponse(chatHistory);
+  }
+  if (pathname === "/api/chat/rename") {
+    const chatId = body.chat_id;
+    let chatHistory = getLocalEntity(`chat:${chatId}`) || { id: chatId, messages: [] };
+    chatHistory.title = body.title;
+    saveLocalEntity(`chat:${chatId}`, chatHistory);
+    await supabaseUpsertClient("chats", { id: chatId, history: chatHistory });
+    return makeJsonResponse({ status: "success", item: chatHistory });
+  }
+  if (pathname === "/api/chat/archive" || pathname === "/api/chat/restore") {
+    const chatId = body.chat_id;
+    let chatHistory = getLocalEntity(`chat:${chatId}`) || { id: chatId, messages: [] };
+    chatHistory.archived = (pathname === "/api/chat/archive");
+    saveLocalEntity(`chat:${chatId}`, chatHistory);
+    await supabaseUpsertClient("chats", { id: chatId, history: chatHistory });
+    return makeJsonResponse({ status: "success" });
+  }
+  if (pathname === "/api/chat/delete-permanent") {
+    const chatId = body.chat_id;
+    try { localStorage.removeItem(`gw_db:chat:${chatId}`); } catch (_) {}
+    await supabaseDeleteClient("chats", "id", chatId);
+    return makeJsonResponse({ status: "success" });
+  }
+
+  if (pathname === "/api/workspace/list") {
+    let remoteWorkspaces = await supabaseQueryClient("workspaces", "select=id,data");
+    let items = [];
+    if (remoteWorkspaces && Array.isArray(remoteWorkspaces)) {
+      items = remoteWorkspaces.filter(w => w.id !== "__system__").map(w => ({ id: w.id, name: w.data?.name || w.id }));
+    }
+    if (!items.length) items = [{ id: "personal", name: "Personal" }];
+    return makeJsonResponse({ items });
+  }
+  if (pathname === "/api/workspace/current") {
+    const activeId = localStorage.getItem("ghostwaiter:active_workspace") || "personal";
+    return makeJsonResponse({ id: activeId, name: activeId === "personal" ? "Personal" : activeId });
+  }
+  if (pathname === "/api/workspace/switch") {
+    localStorage.setItem("ghostwaiter:active_workspace", body.workspace_id);
+    return makeJsonResponse({ status: "success", workspace_id: body.workspace_id });
+  }
+  if (pathname === "/api/workspace/create") {
+    const wsId = `ws_${Date.now()}`;
+    const wsData = { id: wsId, name: body.name };
+    await supabaseUpsertClient("workspaces", { id: wsId, data: wsData });
+    return makeJsonResponse({ status: "success", workspace: wsData });
+  }
+  if (pathname === "/api/workspace/rename") {
+    const wsData = { id: body.workspace_id, name: body.name };
+    await supabaseUpsertClient("workspaces", { id: body.workspace_id, data: wsData });
+    return makeJsonResponse({ status: "success", workspace: wsData });
+  }
+  if (pathname === "/api/workspace/delete") {
+    await supabaseDeleteClient("workspaces", "id", body.workspace_id);
+    return makeJsonResponse({ status: "success" });
+  }
+
+  if (pathname === "/api/draft/create" || pathname === "/api/draft/update") {
+    const draftId = body.draft_id || `draft_${Date.now()}`;
+    const draftObj = { id: draftId, content: body.content || body.text || "", updated_at: new Date().toISOString() };
+    saveLocalEntity(`draft:${draftId}`, draftObj);
+    await supabaseUpsertClient("drafts", { id: draftId, content: draftObj });
+    return makeJsonResponse({ status: "success", draft: draftObj });
+  }
+
+  if (pathname === "/api/brain/profile") {
+    return makeJsonResponse({
+      style_profile: { rules: getLocalEntity("brain_style", ["Gunakan bahasa yang padat dan jelas"]) },
+      thinking_profile: { patterns: getLocalEntity("brain_thinking", []) },
+      rules: getLocalEntity("brain_rules", []),
+      memory: [],
+      conversation_memory: [],
+      pending_proposals: 0,
+      revision_count: 0,
+      raw_writing_count: 0
+    });
+  }
+
+  if (pathname === "/api/sync/status") {
+    const { url, key } = getSupabaseClientCredentials();
+    return makeJsonResponse({ supabase_configured: Boolean(url && key), supabase_connected: Boolean(url && key) });
+  }
+
+  return null;
+}
+
+async function api(path, options = {}) {
+  const baseUrl = localStorage.getItem("ghostwaiter:api_base_url") || "";
+  
+  if (path.startsWith("/") && baseUrl) {
+    const targetUrl = baseUrl.replace(/\/$/, "") + path;
+    try {
+      const response = await fetch(targetUrl, options);
+      if (response.ok) return response;
+    } catch (_) {}
+  }
+
+  try {
+    const clientResponse = await handleClientSideApiRoute(path, options);
+    if (clientResponse) return clientResponse;
+  } catch (err) {
+    console.error("Client API Error:", err);
+    throw err;
+  }
+
+  const response = await fetch(path, options);
+  if (!response.ok) {
+    const err = new Error(`Request failed (${response.status})`);
+    err.status = response.status;
+    throw err;
   }
   return response;
 }
