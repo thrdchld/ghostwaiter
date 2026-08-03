@@ -2275,24 +2275,24 @@ function bindEvents() {
   };
 
 async function fetchModelsForProvider(p) {
-  // 1. Try server backend if available
-  try {
-    const res = await jsonApi("/api/ai/list-models", {
-      method: "POST",
-      headers: {
-        "X-AI-Provider": `custom|${p.type || "openai"}|${p.endpoint}`,
-        "X-OpenRouter-Key": p.key || ""
-      }
-    });
-    if (res && Array.isArray(res.models) && res.models.length > 0) {
-      return res.models;
-    }
-  } catch (_) {}
-
-  // 2. Direct Browser Fetch based on Provider Type & Endpoint for GitHub Pages
   const type = p.type || "openai";
   const endpoint = (p.endpoint || "").replace(/\/$/, "");
   const key = p.key || "";
+
+  const FALLBACK_POPULAR = [
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-flash-1.5",
+    "google/gemini-pro-1.5",
+    "deepseek/deepseek-r1",
+    "deepseek/deepseek-chat",
+    "anthropic/claude-3.5-sonnet",
+    "anthropic/claude-3.5-haiku",
+    "meta-llama/llama-3.3-70b-instruct",
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini",
+    "qwen/qwen-2.5-coder-32b-instruct",
+    "mistralai/mistral-large-2411"
+  ];
 
   if (type === "anthropic") {
     return [
@@ -2304,53 +2304,56 @@ async function fetchModelsForProvider(p) {
   }
 
   if (type === "google") {
-    const url = `${endpoint}/models?key=${key}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Google API (${res.status}): ${await res.text()}`);
-    const data = await res.json();
-    const models = (data.models || []).map(m => m.name ? m.name.replace(/^models\//, "") : m);
-    if (!models.length) throw new Error("No Gemini models returned");
-    return models;
+    try {
+      const url = `${endpoint}/models?key=${key}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const models = (data.models || []).map(m => m.name ? m.name.replace(/^models\//, "") : m);
+        if (models.length) return Array.from(new Set([...models, "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]));
+      }
+    } catch (_) {}
+    return ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.5-flash-8b"];
   }
 
   if (type === "ollama") {
-    const url = `${endpoint}/tags`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Ollama API (${res.status})`);
-    const data = await res.json();
-    const models = (data.models || []).map(m => m.name || m.model);
-    if (!models.length) throw new Error("No Ollama models found");
-    return models;
+    try {
+      const url = `${endpoint}/tags`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const models = (data.models || []).map(m => m.name || m.model);
+        if (models.length) return models;
+      }
+    } catch (_) {}
+    return ["llama3:latest", "mistral:latest", "qwen2.5:latest", "deepseek-r1:latest"];
   }
 
-  // Default OpenAI / OpenRouter / Groq / DeepSeek / Custom endpoint
-  let url = endpoint;
-  if (!url.endsWith("/models")) {
-    url = `${url}/models`;
+  // Fetch via API
+  let fetchedModels = [];
+  try {
+    let url = endpoint;
+    if (!url.endsWith("/models")) url = `${url}/models`;
+    const headers = {};
+    if (key) headers["Authorization"] = `Bearer ${key}`;
+
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      const rawList = Array.isArray(data) ? data : (data.data || data.models || []);
+      fetchedModels = rawList.map(m => typeof m === "string" ? m : (m.id || m.name)).filter(Boolean);
+    }
+  } catch (err) {
+    console.warn("Model fetch notice:", err);
   }
 
-  const headers = {};
-  if (key) headers["Authorization"] = `Bearer ${key}`;
-
-  const res = await fetch(url, { headers });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`API Error (${res.status}): ${errText.slice(0, 120)}`);
-  }
-
-  const data = await res.json();
-  const rawList = Array.isArray(data) ? data : (data.data || data.models || []);
-  const models = rawList.map(m => typeof m === "string" ? m : (m.id || m.name)).filter(Boolean);
-
-  if (!models.length) {
-    throw new Error("No models returned by API endpoint");
-  }
-
-  return models;
+  // Combine fetched models with popular models so the list is always rich and complete
+  const combined = Array.from(new Set([...fetchedModels, ...FALLBACK_POPULAR]));
+  return combined.length ? combined : FALLBACK_POPULAR;
 }
 
   window.loadModelsForProvider = async (providerId) => {
-    const modelsList = $("#ai-models-list");
+    const modelsList = $("#models-list") || $("#ai-models-list");
     if (!modelsList) return;
     
     modelsList.innerHTML = `
@@ -2420,6 +2423,20 @@ async function fetchModelsForProvider(p) {
       await window.loadModelsForProvider(activeId);
     };
   }
+
+  const applyManualBtn = $("#apply-manual-model-btn");
+  if (applyManualBtn) {
+    applyManualBtn.onclick = () => {
+      const modelVal = ($("#manual-model-input")?.value || "").trim();
+      if (!modelVal) {
+        toast("Please type a model ID first", "error");
+        return;
+      }
+      applyActiveModel(modelVal);
+      if ($("#manual-model-input")) $("#manual-model-input").value = "";
+      toast(`Model set to: ${modelVal}`, "success");
+    };
+  }
   
   // Custom Dropdown Trigger and Option events
   const aiProviderTrigger = $("#ai-provider-trigger");
@@ -2447,9 +2464,11 @@ async function fetchModelsForProvider(p) {
   });
 
   function renderModels() {
+    const modelsList = $("#models-list") || $("#ai-models-list");
+    const modelSearch = $("#model-search");
     if (!modelsList) return;
     modelsList.innerHTML = "";
-    const query = modelSearch.value.toLowerCase();
+    const query = (modelSearch?.value || "").toLowerCase();
     const filtered = allModels.filter(m =>
       m.id.toLowerCase().includes(query) || m.name.toLowerCase().includes(query)
     );

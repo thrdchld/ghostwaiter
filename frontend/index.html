@@ -626,8 +626,13 @@
 
           <!-- Model selection container (hidden by default) -->
           <div id="model-selection-container" class="hidden" style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-            <input type="text" id="model-search" placeholder="Search models..." style="width: 100%;">
-            <div id="models-list" style="display: grid; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 4px;">
+            <!-- Manual Model ID Input -->
+            <div style="display: flex; gap: 6px;">
+              <input type="text" id="manual-model-input" placeholder="Or type model ID manually (e.g. deepseek/deepseek-r1)..." style="flex: 1; font-size: 0.8rem;">
+              <button id="apply-manual-model-btn" class="button primary compact" type="button" style="white-space: nowrap;">Use Model</button>
+            </div>
+            <input type="text" id="model-search" placeholder="Search models below..." style="width: 100%;">
+            <div id="models-list" style="display: grid; gap: 8px; max-height: 220px; overflow-y: auto; padding-right: 4px;">
               <!-- Populated by JS -->
             </div>
           </div>
