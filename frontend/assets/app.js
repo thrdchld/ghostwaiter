@@ -508,7 +508,95 @@ async function handleClientSideApiRoute(path, options) {
     return makeJsonResponse({ status: "success" });
   }
 
-  // 3. AI Generation (Auto-Writer)
+  // 3. AI Config Sync & Persistence Route
+  if (pathname === "/api/ai/config") {
+    if (options.method === "POST") {
+      const provider = body.provider || "custom";
+      const model = body.model || "";
+      const keys = body.keys || {};
+
+      localStorage.setItem("ghostwaiter:ai_provider", provider);
+      if (model) localStorage.setItem("ghostwaiter:openrouter_model", model);
+
+      if (keys.custom_providers) {
+        let list = keys.custom_providers;
+        if (typeof list === "string") {
+          try { list = JSON.parse(list); } catch (_) {}
+        }
+        if (Array.isArray(list)) {
+          const encryptedList = list.map(p => ({
+            ...p,
+            key: hashEncrypt(p.key)
+          }));
+          localStorage.setItem("ghostwaiter:custom_providers", JSON.stringify(encryptedList));
+        }
+      }
+      if (keys.custom_active_id) {
+        localStorage.setItem("ghostwaiter:custom_active_id", keys.custom_active_id);
+      }
+      if (keys.custom_endpoint) {
+        localStorage.setItem("ghostwaiter:custom_endpoint", keys.custom_endpoint);
+      }
+      if (keys.custom) {
+        localStorage.setItem("ghostwaiter:key_custom", hashEncrypt(keys.custom));
+      }
+
+      const encryptedProviders = getCustomProviders().map(p => ({ ...p, key: hashEncrypt(p.key) }));
+      await supabaseUpsertClient("workspaces", {
+        id: "__system__",
+        data: {
+          provider,
+          model,
+          custom_providers: encryptedProviders,
+          active_provider_id: localStorage.getItem("ghostwaiter:custom_active_id") || "",
+          custom_endpoint: localStorage.getItem("ghostwaiter:custom_endpoint") || "",
+          custom_key: hashEncrypt(localStorage.getItem("ghostwaiter:key_custom") || ""),
+          updated_at: new Date().toISOString()
+        }
+      });
+
+      updateModelIndicator();
+      return makeJsonResponse({ status: "success", provider, model });
+    } else {
+      const remote = await supabaseQueryClient("workspaces", "id=eq.__system__");
+      let remoteData = {};
+      if (remote && remote.length && remote[0].data) {
+        remoteData = remote[0].data;
+        if (remoteData.provider) localStorage.setItem("ghostwaiter:ai_provider", remoteData.provider);
+        if (remoteData.model) localStorage.setItem("ghostwaiter:openrouter_model", remoteData.model);
+        if (remoteData.custom_providers) {
+          localStorage.setItem("ghostwaiter:custom_providers", JSON.stringify(remoteData.custom_providers));
+        }
+        if (remoteData.active_provider_id) {
+          localStorage.setItem("ghostwaiter:custom_active_id", remoteData.active_provider_id);
+        }
+        if (remoteData.custom_endpoint) {
+          localStorage.setItem("ghostwaiter:custom_endpoint", remoteData.custom_endpoint);
+        }
+        if (remoteData.custom_key) {
+          localStorage.setItem("ghostwaiter:key_custom", remoteData.custom_key);
+        }
+        updateModelIndicator();
+      }
+
+      const activeProvider = localStorage.getItem("ghostwaiter:ai_provider") || remoteData.provider || "custom";
+      const activeModel = localStorage.getItem("ghostwaiter:openrouter_model") || remoteData.model || "";
+      const rawProviders = localStorage.getItem("ghostwaiter:custom_providers") || "[]";
+
+      return makeJsonResponse({
+        provider: activeProvider,
+        model: activeModel,
+        keys: {
+          custom_providers: rawProviders,
+          custom_active_id: localStorage.getItem("ghostwaiter:custom_active_id") || "",
+          custom_endpoint: localStorage.getItem("ghostwaiter:custom_endpoint") || "",
+          custom: localStorage.getItem("ghostwaiter:key_custom") || ""
+        }
+      });
+    }
+  }
+
+  // 4. AI Generation (Auto-Writer)
   if (pathname === "/api/ai/generate") {
     return handleClientSideAiGenerate(body, options.signal);
   }
@@ -1001,11 +1089,8 @@ async function syncAIConfigFromSupabase() {
             if (providerKey === "custom_endpoint") {
               localStorage.setItem("ghostwaiter:custom_endpoint", val);
             } else if (providerKey === "custom_providers") {
-              // Only restore from DB if local is empty
-              const localList = localStorage.getItem("ghostwaiter:custom_providers");
-              if (!localList || localList === "[]") {
-                localStorage.setItem("ghostwaiter:custom_providers", val);
-              }
+              const strVal = typeof val === "string" ? val : JSON.stringify(val);
+              localStorage.setItem("ghostwaiter:custom_providers", strVal);
             } else if (providerKey === "custom_api_type") {
               localStorage.setItem("ghostwaiter:custom_api_type", val);
             } else if (providerKey === "custom_active_id") {
