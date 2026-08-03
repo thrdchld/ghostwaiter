@@ -46,7 +46,7 @@ const state = {
 async function loadTranslations() {
   const lang = state.language || "en";
   try {
-    const res = await fetch(`/assets/locales/${lang}.json`);
+    const res = await fetch(`./assets/locales/${lang}.json`);
     if (!res.ok) throw new Error("Failed to load translation file");
     const dict = await res.json();
     for (const key in dict) {
@@ -757,7 +757,7 @@ async function initialize() {
     performSync(true);
   }, 5 * 60 * 1000);
 
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/service-worker.js");
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
 }
 
 let theme = localStorage.getItem("ghostwaiter:theme") || "system";
@@ -2925,7 +2925,7 @@ function bindEvents() {
       await loadWorkspaces();
       await Promise.all([loadSyncStatus()]);
       restoreLocalDraft();
-      if ("serviceWorker" in navigator) navigator.serviceWorker.register("/service-worker.js");
+      if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
     } catch (error) {
       $("#login-error").textContent = error.message;
     }
