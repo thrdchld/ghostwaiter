@@ -29,7 +29,9 @@ jobs:
           cat << EOF > frontend/assets/js/env.js
           window.__ENV__ = {
             SUPABASE_URL: "${{ secrets.SUPABASE_URL }}",
-            SUPABASE_KEY: "${{ secrets.SUPABASE_KEY }}"
+            SUPABASE_KEY: "${{ secrets.SUPABASE_KEY }}",
+            APP_USERNAME: "${{ secrets.APP_USERNAME }}",
+            APP_PASSWORD: "${{ secrets.APP_PASSWORD }}"
           };
           EOF
 

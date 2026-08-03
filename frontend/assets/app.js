@@ -675,20 +675,27 @@ function showView(view) {
 }
 
 async function initialize() {
-  let auth = { authenticated: true, password_required: false };
+  const envUsername = window.__ENV__?.APP_USERNAME || "";
+  const envPassword = window.__ENV__?.APP_PASSWORD || "";
+  const isAuthRequired = Boolean(envUsername || envPassword);
+  const isAuthenticated = localStorage.getItem("ghostwaiter:authenticated") === "true";
+
+  let serverAuth = { authenticated: true, password_required: false };
   try {
-    auth = await jsonApi("/api/auth/status");
-  } catch (_) {
-    // Standard default when auth endpoint is not active or frontend runs statically
-  }
-  if (!auth.authenticated && auth.password_required) {
+    serverAuth = await jsonApi("/api/auth/status");
+  } catch (_) {}
+
+  const requiresAuth = isAuthRequired || serverAuth.password_required;
+  const loggedIn = isAuthRequired ? isAuthenticated : serverAuth.authenticated;
+
+  if (requiresAuth && !loggedIn) {
     $("#login-screen").classList.remove("hidden");
     $("#app").classList.add("hidden");
     return;
   }
   $("#login-screen").classList.add("hidden");
   $("#app").classList.remove("hidden");
-  if ($("#logout-button")) $("#logout-button").classList.toggle("hidden", !auth.password_required);
+  if ($("#logout-button")) $("#logout-button").classList.toggle("hidden", !requiresAuth);
   
   applyTheme();
   await loadTranslations();
@@ -2984,17 +2991,44 @@ function bindEvents() {
   };
 
   $("#logout-button").onclick = async () => {
-    await jsonApi("/api/auth/logout", {method: "POST"});
+    try { await jsonApi("/api/auth/logout", {method: "POST"}); } catch (_) {}
     localStorage.removeItem("ghostwaiter:session");
+    localStorage.removeItem("ghostwaiter:authenticated");
     state.sessionToken = "";
     location.reload();
   };
+
   $("#login-form").onsubmit = async event => {
     event.preventDefault();
+    const usernameInput = $("#login-username")?.value.trim() || "";
+    const passwordInput = $("#login-password")?.value.trim() || "";
+    const envUsername = window.__ENV__?.APP_USERNAME || "";
+    const envPassword = window.__ENV__?.APP_PASSWORD || "";
+
+    // 1. Client-Side GitHub Secrets Auth check
+    if (envUsername || envPassword) {
+      if (envUsername && usernameInput.toLowerCase() !== envUsername.toLowerCase()) {
+        $("#login-error").textContent = "Username salah";
+        return;
+      }
+      if (envPassword && passwordInput !== envPassword) {
+        $("#login-error").textContent = "Password salah";
+        return;
+      }
+      localStorage.setItem("ghostwaiter:authenticated", "true");
+      $("#login-screen").classList.add("hidden");
+      $("#app").classList.remove("hidden");
+      toast("Login berhasil", "success");
+      await initialize();
+      return;
+    }
+
+    // 2. Server Backend Auth fallback
     try {
-      const result = await jsonApi("/api/auth/login", {method: "POST", body: {password: $("#login-password").value}});
+      const result = await jsonApi("/api/auth/login", {method: "POST", body: {password: passwordInput}});
       state.sessionToken = result.session_token || "";
       if (state.sessionToken) localStorage.setItem("ghostwaiter:session", state.sessionToken);
+      localStorage.setItem("ghostwaiter:authenticated", "true");
       $("#login-screen").classList.add("hidden");
       $("#app").classList.remove("hidden");
       await loadWorkspaces();
