@@ -1223,8 +1223,22 @@ function showView(view) {
 
 function lockApp(reason = "") {
   localStorage.removeItem("ghostwaiter:authenticated");
-  $("#app").classList.add("hidden");
-  $("#login-screen").classList.remove("hidden");
+  localStorage.removeItem("ghostwaiter:session");
+  state.sessionToken = "";
+  
+  const appNode = $("#app");
+  const loginNode = $("#login-screen");
+  
+  if (appNode) appNode.classList.add("hidden");
+  if (loginNode) {
+    loginNode.classList.remove("hidden");
+    const passInput = $("#login-password");
+    if (passInput) {
+      passInput.value = "";
+      setTimeout(() => passInput.focus(), 50);
+    }
+  }
+  
   if ($("#login-error")) $("#login-error").textContent = reason || "";
 }
 
@@ -4452,6 +4466,9 @@ async function saveCurrentNoteFromCreator() {
 window.openEditNoteModal = function(noteId) {
   const note = state.notes.find(n => n.id === noteId);
   if (!note) return;
+  
+  window.currentEditNote = JSON.parse(JSON.stringify(note));
+  window.currentEditNoteOriginal = JSON.parse(JSON.stringify(note));
   
   let modalImageHtml = "";
   if (note.image) {
