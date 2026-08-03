@@ -165,19 +165,54 @@ async function supabaseDeleteClient(table, idColumn, idVal) {
   }
 }
 
+function getDecryptedActiveAiConfig() {
+  const provider = localStorage.getItem("ghostwaiter:ai_provider") || "custom";
+  let model = localStorage.getItem("ghostwaiter:openrouter_model") || "";
+  let key = "";
+  let endpoint = "https://openrouter.ai/api/v1";
+  let type = "openai";
+
+  if (provider === "custom") {
+    const activeId = localStorage.getItem("ghostwaiter:custom_active_id") || "";
+    const providers = getCustomProviders();
+    const activeProvider = providers.find(p => p.id === activeId) || providers[0];
+    if (activeProvider) {
+      key = hashDecrypt(activeProvider.key);
+      endpoint = activeProvider.endpoint || endpoint;
+      type = activeProvider.type || "openai";
+    }
+  }
+
+  if (!key) {
+    const rawKey = localStorage.getItem(`ghostwaiter:key_${provider}`) ||
+                   localStorage.getItem("ghostwaiter:openrouter_key") ||
+                   localStorage.getItem("ghostwaiter:key_custom") || "";
+    key = hashDecrypt(rawKey);
+  }
+
+  if (!endpoint || endpoint === "https://openrouter.ai/api/v1") {
+    const savedEndpoint = localStorage.getItem("ghostwaiter:custom_endpoint");
+    if (savedEndpoint) endpoint = savedEndpoint;
+  }
+
+  if (provider === "openrouter") endpoint = "https://openrouter.ai/api/v1";
+  else if (provider === "groq") endpoint = "https://api.groq.com/openai/v1";
+  else if (provider === "deepseek") endpoint = "https://api.deepseek.com/v1";
+  else if (provider === "google") endpoint = "https://generativelanguage.googleapis.com/v1beta/openai";
+
+  return { provider, model, key, endpoint, type };
+}
+
 async function handleClientSideChatSend(body, signal) {
   const workspaceId = body.workspace_id || state.workspace || "personal";
   let chatId = body.chat_id || `chat_${Date.now()}`;
   const userMessage = body.message || "";
   const attachments = body.attachments || [];
 
-  const provider = localStorage.getItem("ghostwaiter:ai_provider") || "custom";
-  const model = localStorage.getItem("ghostwaiter:openrouter_model") || "";
-  const key = localStorage.getItem(`ghostwaiter:key_${provider}`) || localStorage.getItem("ghostwaiter:openrouter_key") || localStorage.getItem("ghostwaiter:key_custom") || "";
-  const customEndpoint = localStorage.getItem("ghostwaiter:custom_endpoint") || "https://openrouter.ai/api/v1";
+  const { provider, model, key, endpoint, type } = getDecryptedActiveAiConfig();
 
   if (!model) {
-    throw new Error("Select an AI model in Settings first.");
+    throw new Error("Pilih model AI di Settings terlebih dahulu.");
   }
 
   let chatHistory = getLocalEntity(`chat:${chatId}`);
@@ -228,16 +263,18 @@ async function handleClientSideChatSend(body, signal) {
     }
   }
 
-  let targetEndpoint = customEndpoint.replace(/\/$/, "");
-  if (provider === "openrouter") targetEndpoint = "https://openrouter.ai/api/v1";
-  else if (provider === "groq") targetEndpoint = "https://api.groq.com/openai/v1";
-  else if (provider === "deepseek") targetEndpoint = "https://api.deepseek.com/v1";
-  else if (provider === "google") targetEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai";
-
+  let targetEndpoint = endpoint.replace(/\/$/, "");
   const completionsUrl = targetEndpoint.endsWith("/chat/completions") ? targetEndpoint : `${targetEndpoint}/chat/completions`;
 
   const headers = { "Content-Type": "application/json" };
-  if (key) headers["Authorization"] = `Bearer ${key}`;
+  if (key) {
+    if (type === "anthropic") {
+      headers["x-api-key"] = key;
+      headers["anthropic-version"] = "2023-06-01";
+    } else {
+      headers["Authorization"] = `Bearer ${key}`;
+    }
+  }
 
   const completionBody = JSON.stringify({
     model: model,
@@ -314,12 +351,9 @@ async function handleClientSideAiGenerate(body, signal) {
   const prompt = body.prompt || "";
   const mode = body.mode || "write";
 
-  const provider = localStorage.getItem("ghostwaiter:ai_provider") || "custom";
-  const model = localStorage.getItem("ghostwaiter:openrouter_model") || "";
-  const key = localStorage.getItem(`ghostwaiter:key_${provider}`) || localStorage.getItem("ghostwaiter:openrouter_key") || localStorage.getItem("ghostwaiter:key_custom") || "";
-  const customEndpoint = localStorage.getItem("ghostwaiter:custom_endpoint") || "https://openrouter.ai/api/v1";
+  const { provider, model, key, endpoint, type } = getDecryptedActiveAiConfig();
 
-  if (!model) throw new Error("Select an AI model in Settings first.");
+  if (!model) throw new Error("Pilih model AI di Settings terlebih dahulu.");
 
   let systemPrompt = "You are an expert ghostwriter and copywriter. Produce high quality, clear, human-like content.";
   if (mode === "rewrite") systemPrompt += " Rewrite the following text to improve flow, clarity, and tone while retaining key facts.";
@@ -328,16 +362,18 @@ async function handleClientSideAiGenerate(body, signal) {
   else if (mode === "brainstorm") systemPrompt += " Brainstorm creative ideas, bullet points, and angles based on the prompt.";
   else if (mode === "translate") systemPrompt += " Translate the text accurately while maintaining natural, fluent phrasing.";
 
-  let targetEndpoint = customEndpoint.replace(/\/$/, "");
-  if (provider === "openrouter") targetEndpoint = "https://openrouter.ai/api/v1";
-  else if (provider === "groq") targetEndpoint = "https://api.groq.com/openai/v1";
-  else if (provider === "deepseek") targetEndpoint = "https://api.deepseek.com/v1";
-  else if (provider === "google") targetEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai";
-
+  let targetEndpoint = endpoint.replace(/\/$/, "");
   const completionsUrl = targetEndpoint.endsWith("/chat/completions") ? targetEndpoint : `${targetEndpoint}/chat/completions`;
 
   const headers = { "Content-Type": "application/json" };
-  if (key) headers["Authorization"] = `Bearer ${key}`;
+  if (key) {
+    if (type === "anthropic") {
+      headers["x-api-key"] = key;
+      headers["anthropic-version"] = "2023-06-01";
+    } else {
+      headers["Authorization"] = `Bearer ${key}`;
+    }
+  }
 
   const completionBody = JSON.stringify({
     model: model,
