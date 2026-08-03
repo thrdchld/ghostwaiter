@@ -1,0 +1,96 @@
+/* ─── Design Tokens & CSS Variables ─────────────────────────────────────── */
+:root {
+  --bg-base: #f5f6f8;
+  --bg-surface: #ffffff;
+  --bg-muted: #f7f7f8;
+  --bg-hover: #f0f1f3;
+  --bg-elevated: #f9fafb;
+
+  --text-primary: #0f172a;
+  --text-secondary: #5b6475;
+  --text-tertiary: #8a93a6;
+  --text-on-accent: #ffffff;
+
+  --border: #e8eaee;
+  --border-strong: #d7dbe3;
+  --border-focus: rgba(15, 23, 42, 0.1);
+
+  --accent: #0f172a;
+  --accent-hover: #111827;
+  --accent-soft: #eef2ff;
+
+  --status-success: #16a34a;
+  --status-warning: #f59e0b;
+  --status-danger: #dc2626;
+  --error: #dc2626;
+
+  --bg-backdrop: rgba(15, 23, 42, 0.48);
+  --shadow-color: rgba(15, 23, 42, 0.06);
+
+  --shadow-sm: 0 1px 2px var(--shadow-color);
+  --shadow-md: 0 10px 24px -18px var(--shadow-color), 0 4px 12px -10px var(--shadow-color);
+  --shadow-lg: 0 22px 40px -28px rgba(15, 23, 42, 0.18);
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-full: 14px;
+  --radius-squircle: 35%;
+
+  --focus-ring: 0 0 0 3px rgba(15, 23, 42, 0.08);
+
+  --sidebar-width: 260px;
+  --topbar-height: 68px;
+}
+
+:root[data-theme="dark"] {
+  --bg-base: #0f1115;
+  --bg-surface: #181b22;
+  --bg-muted: #1f2430;
+  --bg-hover: #262d3a;
+  --bg-elevated: #12161d;
+
+  --text-primary: #eef2ff;
+  --text-secondary: #a7afbf;
+  --text-tertiary: #7d879c;
+  --text-on-accent: #0f172a;
+
+  --border: #262d3a;
+  --border-strong: #374151;
+  --border-focus: rgba(148, 163, 184, 0.18);
+
+  --accent: #e5e7eb;
+  --accent-hover: #ffffff;
+  --accent-soft: rgba(59, 130, 246, 0.12);
+
+  --bg-backdrop: rgba(3, 7, 18, 0.72);
+  --shadow-color: rgba(0, 0, 0, 0.35);
+  --error: #f87171;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-base: #0f1115;
+    --bg-surface: #181b22;
+    --bg-muted: #1f2430;
+    --bg-hover: #262d3a;
+    --bg-elevated: #12161d;
+
+    --text-primary: #eef2ff;
+    --text-secondary: #a7afbf;
+    --text-tertiary: #7d879c;
+    --text-on-accent: #0f172a;
+
+    --border: #262d3a;
+    --border-strong: #374151;
+    --border-focus: rgba(148, 163, 184, 0.18);
+
+    --accent: #e5e7eb;
+    --accent-hover: #ffffff;
+    --accent-soft: rgba(59, 130, 246, 0.12);
+
+    --bg-backdrop: rgba(3, 7, 18, 0.72);
+    --shadow-color: rgba(0, 0, 0, 0.35);
+    --error: #f87171;
+  }
+}
