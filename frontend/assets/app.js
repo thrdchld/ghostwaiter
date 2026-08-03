@@ -3731,80 +3731,94 @@ async function verifyAIConnection(type, endpoint, key) {
     }, true);
   }
 
-  $("#compare-button").onclick = compareRevision;
-  $("#commit-compare-button").onclick = commitCompare;
-  $("#import-file").onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    toast("Importing data...");
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const response = await api("/api/import", { method: "POST", body: formData });
-      if (!response.ok) throw await response.json().catch(() => ({message: `HTTP ${response.status}`}));
-      toast("Import successful! Reloading...", "success");
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err) {
-      toast("Failed to import file: " + err.message, "error");
-    }
-    e.target.value = "";
-  };
+  if ($("#compare-button")) $("#compare-button").onclick = compareRevision;
+  if ($("#commit-compare-button")) $("#commit-compare-button").onclick = commitCompare;
+  if ($("#import-file")) {
+    $("#import-file").onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      toast("Importing data...");
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await api("/api/import", { method: "POST", body: formData });
+        if (!response.ok) throw await response.json().catch(() => ({message: `HTTP ${response.status}`}));
+        toast("Import successful! Reloading...", "success");
+        setTimeout(() => window.location.reload(), 1500);
+      } catch (err) {
+        toast("Failed to import file: " + err.message, "error");
+      }
+      e.target.value = "";
+    };
+  }
 
-  $("#learn-raw-button").onclick = learnRawWriting;
-  $("#reference-button").onclick = searchReferences;
+  if ($("#learn-raw-button")) $("#learn-raw-button").onclick = learnRawWriting;
+  if ($("#reference-button")) $("#reference-button").onclick = searchReferences;
 
-  $("#sync-status").onclick = async () => {
-    await performSync();
-  };
+  if ($("#sync-status")) {
+    $("#sync-status").onclick = async () => {
+      await performSync();
+    };
+  }
 
-  $("#sync-push-btn").onclick = async () => {
-    $("#data-modal").classList.add("hidden");
-    if (!(await showConfirm("Data in GitHub will be fully overwritten by your local data. Continue Push?"))) return;
-    const overlay = $("#loading-overlay");
-    const loadingText = $("#loading-text");
-    try {
-      loadingText.textContent = "Pushing to GitHub...";
-      overlay.classList.remove("hidden");
-      await jsonApi("/api/sync/push", {method: "POST"});
-      overlay.classList.add("hidden");
-      await loadSyncStatus();
-      setTimeout(() => toast("Push sync completed", "success"), 50);
-    } catch (error) {
-      overlay.classList.add("hidden");
-      setTimeout(() => toast(error.message, "error"), 50);
-    }
-  };
+  if ($("#sync-push-btn")) {
+    $("#sync-push-btn").onclick = async () => {
+      if ($("#data-modal")) $("#data-modal").classList.add("hidden");
+      if (!(await showConfirm("Data in GitHub will be fully overwritten by your local data. Continue Push?"))) return;
+      const overlay = $("#loading-overlay");
+      const loadingText = $("#loading-text");
+      try {
+        if (loadingText) loadingText.textContent = "Pushing to GitHub...";
+        if (overlay) overlay.classList.remove("hidden");
+        await jsonApi("/api/sync/push", {method: "POST"});
+        if (overlay) overlay.classList.add("hidden");
+        await loadSyncStatus();
+        setTimeout(() => toast("Push sync completed", "success"), 50);
+      } catch (error) {
+        if (overlay) overlay.classList.add("hidden");
+        setTimeout(() => toast(error.message, "error"), 50);
+      }
+    };
+  }
 
-  $("#sync-pull-btn").onclick = async () => {
-    $("#data-modal").classList.add("hidden");
-    if (!(await showConfirm("Your local data will be overwritten by GitHub data. This cannot be undone. Continue Pull?"))) return;
-    const overlay = $("#loading-overlay");
-    const loadingText = $("#loading-text");
-    try {
-      loadingText.textContent = "Pulling from GitHub...";
-      overlay.classList.remove("hidden");
-      await jsonApi("/api/sync/pull", {method: "POST"});
-      overlay.classList.add("hidden");
-      setTimeout(() => {
-        toast("Pull sync completed. Reloading...", "success");
-        setTimeout(() => location.reload(), 1500);
-      }, 50);
-    } catch (error) {
-      overlay.classList.add("hidden");
-      setTimeout(() => toast(error.message, "error"), 50);
-    }
-  };
+  if ($("#sync-pull-btn")) {
+    $("#sync-pull-btn").onclick = async () => {
+      if ($("#data-modal")) $("#data-modal").classList.add("hidden");
+      if (!(await showConfirm("Your local data will be overwritten by GitHub data. This cannot be undone. Continue Pull?"))) return;
+      const overlay = $("#loading-overlay");
+      const loadingText = $("#loading-text");
+      try {
+        if (loadingText) loadingText.textContent = "Pulling from GitHub...";
+        if (overlay) overlay.classList.remove("hidden");
+        await jsonApi("/api/sync/pull", {method: "POST"});
+        if (overlay) overlay.classList.add("hidden");
+        setTimeout(() => {
+          toast("Pull sync completed. Reloading...", "success");
+          setTimeout(() => location.reload(), 1500);
+        }, 50);
+      } catch (error) {
+        if (overlay) overlay.classList.add("hidden");
+        setTimeout(() => toast(error.message, "error"), 50);
+      }
+    };
+  }
 
-  $("#logout-button").onclick = async () => {
-    try { await jsonApi("/api/auth/logout", {method: "POST"}); } catch (_) {}
-    localStorage.removeItem("ghostwaiter:session");
-    localStorage.removeItem("ghostwaiter:authenticated");
-    state.sessionToken = "";
-    location.reload();
-  };
+  if ($("#logout-button")) {
+    $("#logout-button").onclick = async () => {
+      try { await jsonApi("/api/auth/logout", {method: "POST"}); } catch (_) {}
+      localStorage.removeItem("ghostwaiter:session");
+      localStorage.removeItem("ghostwaiter:authenticated");
+      state.sessionToken = "";
+      location.reload();
+    };
+  }
 
   if ($("#lock-button")) {
-    $("#lock-button").onclick = () => {
+    $("#lock-button").onclick = (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       lockApp();
       toast("Application locked", "info");
     };
@@ -4388,44 +4402,54 @@ function initNotesSystem() {
     };
   }
   
-  $("#note-upload-btn").onclick = () => {
-    $("#note-file-input").click();
-  };
+  if ($("#note-upload-btn")) {
+    $("#note-upload-btn").onclick = () => {
+      if ($("#note-file-input")) $("#note-file-input").click();
+    };
+  }
   
-  $("#note-file-input").onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const compressed = await compressImage(file);
-      creatorImage = compressed;
-      $("#note-preview-img").src = compressed;
-      $("#note-image-preview").classList.remove("hidden");
-    } catch (err) {
-      console.error(err);
-      toast("Image compression failed", "error");
-    }
-  };
+  if ($("#note-file-input")) {
+    $("#note-file-input").onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const compressed = await compressImage(file);
+        creatorImage = compressed;
+        if ($("#note-preview-img")) $("#note-preview-img").src = compressed;
+        if ($("#note-image-preview")) $("#note-image-preview").classList.remove("hidden");
+      } catch (err) {
+        console.error(err);
+        toast("Image compression failed", "error");
+      }
+    };
+  }
   
-  $("#note-embed-btn").onclick = async () => {
-    const url = await showPrompt("Enter image URL:");
-    if (url) {
-      creatorImage = url;
-      $("#note-preview-img").src = url;
-      $("#note-image-preview").classList.remove("hidden");
-    }
-  };
+  if ($("#note-embed-btn")) {
+    $("#note-embed-btn").onclick = async () => {
+      const url = await showPrompt("Enter image URL:");
+      if (url) {
+        creatorImage = url;
+        if ($("#note-preview-img")) $("#note-preview-img").src = url;
+        if ($("#note-image-preview")) $("#note-image-preview").classList.remove("hidden");
+      }
+    };
+  }
   
-  $("#note-remove-img-btn").onclick = () => {
-    creatorImage = null;
-    $("#note-image-preview").classList.add("hidden");
-    $("#note-preview-img").src = "";
-    $("#note-file-input").value = "";
-  };
+  if ($("#note-remove-img-btn")) {
+    $("#note-remove-img-btn").onclick = () => {
+      creatorImage = null;
+      if ($("#note-image-preview")) $("#note-image-preview").classList.add("hidden");
+      if ($("#note-preview-img")) $("#note-preview-img").src = "";
+      if ($("#note-file-input")) $("#note-file-input").value = "";
+    };
+  }
   
-  $("#note-save-btn").onclick = (e) => {
-    e.stopPropagation();
-    saveCurrentNoteFromCreator();
-  };
+  if ($("#note-save-btn")) {
+    $("#note-save-btn").onclick = (e) => {
+      e.stopPropagation();
+      saveCurrentNoteFromCreator();
+    };
+  }
   
   // Close and save on click outside creator card
   document.addEventListener("click", (e) => {
