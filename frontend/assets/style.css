@@ -2299,6 +2299,26 @@ details.accordion-clean summary::-webkit-details-marker {
   appearance: none !important;
 }
 
+/* Theme-consistent Select Dropdown styling */
+select, #autolock-select {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 8px 12px !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  outline: none;
+  cursor: pointer;
+  appearance: auto;
+}
+
+select option, #autolock-select option {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  padding: 8px 12px;
+}
+
 /* Note Creator */
 .note-creator {
   background: var(--bg-surface);
@@ -2309,11 +2329,14 @@ details.accordion-clean summary::-webkit-details-marker {
   width: 100%;
   margin: 0 auto 16px auto;
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
+  z-index: var(--z-base);
 }
 .note-creator:focus-within {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
+  z-index: var(--z-sticky);
 }
 .note-creator-collapsed {
   padding: 14px 18px;
@@ -2354,8 +2377,10 @@ details.accordion-clean summary::-webkit-details-marker {
   font-weight: 600;
   color: var(--text-primary);
   width: 100%;
-  padding: 4px 0;
+  padding: 6px 10px;
+  margin-left: -10px;
   outline: none;
+  border-radius: var(--radius-sm);
 }
 .note-creator-content {
   border: none;
@@ -2366,9 +2391,11 @@ details.accordion-clean summary::-webkit-details-marker {
   min-height: 80px;
   resize: vertical;
   outline: none;
-  padding: 4px 0;
+  padding: 6px 10px;
+  margin-left: -10px;
   line-height: 1.5;
   font-family: inherit;
+  border-radius: var(--radius-sm);
 }
 .note-creator-pin-btn {
   background: transparent;

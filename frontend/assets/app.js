@@ -740,15 +740,88 @@ function toggleCustomEndpointView(provider) {
   // Toggling endpoint view is handled statically in redesigned tab layout
 }
 
+// ── Client-Side Encryption & Supabase Sync for AI Credentials ────────────
+function hashEncrypt(text, salt = "ghostwaiter_vault_key") {
+  if (!text) return "";
+  if (typeof text === "string" && text.startsWith("enc_v1:")) return text;
+  try {
+    let result = "";
+    for (let i = 0; i < text.length; i++) {
+      const charCode = text.charCodeAt(i) ^ salt.charCodeAt(i % salt.length);
+      result += String.fromCharCode(charCode);
+    }
+    return "enc_v1:" + btoa(result);
+  } catch (e) {
+    return text;
+  }
+}
+
+function hashDecrypt(encryptedText, salt = "ghostwaiter_vault_key") {
+  if (!encryptedText) return "";
+  if (typeof encryptedText !== "string" || !encryptedText.startsWith("enc_v1:")) return encryptedText;
+  try {
+    const raw = atob(encryptedText.replace("enc_v1:", ""));
+    let result = "";
+    for (let i = 0; i < raw.length; i++) {
+      const charCode = raw.charCodeAt(i) ^ salt.charCodeAt(i % salt.length);
+      result += String.fromCharCode(charCode);
+    }
+    return result;
+  } catch (e) {
+    return encryptedText;
+  }
+}
+
 // ── Custom Providers CRUD ────────────────────────────────────────────────
 function getCustomProviders() {
   try {
-    return JSON.parse(localStorage.getItem("ghostwaiter:custom_providers") || "[]");
+    const raw = localStorage.getItem("ghostwaiter:custom_providers") || "[]";
+    const list = JSON.parse(raw);
+    return list.map(p => ({
+      ...p,
+      key: hashDecrypt(p.key)
+    }));
   } catch { return []; }
 }
 
 function saveCustomProviders(list) {
-  localStorage.setItem("ghostwaiter:custom_providers", JSON.stringify(list));
+  const encryptedList = list.map(p => ({
+    ...p,
+    key: hashEncrypt(p.key)
+  }));
+
+  localStorage.setItem("ghostwaiter:custom_providers", JSON.stringify(encryptedList));
+
+  const activeModel = localStorage.getItem("ghostwaiter:openrouter_model") || "";
+  const activeProvider = localStorage.getItem("ghostwaiter:custom_active_id") || "";
+
+  supabaseUpsertClient("workspaces", {
+    id: "__system__",
+    data: {
+      custom_providers: encryptedList,
+      active_provider_id: activeProvider,
+      active_model: activeModel,
+      updated_at: new Date().toISOString()
+    }
+  }).catch(() => {});
+}
+
+async function loadAIProvidersFromSupabase() {
+  try {
+    const remote = await supabaseQueryClient("workspaces", "id=eq.__system__");
+    if (remote && remote.length && remote[0].data?.custom_providers) {
+      const remoteList = remote[0].data.custom_providers;
+      localStorage.setItem("ghostwaiter:custom_providers", JSON.stringify(remoteList));
+      if (remote[0].data.active_provider_id) {
+        localStorage.setItem("ghostwaiter:custom_active_id", remote[0].data.active_provider_id);
+      }
+      if (remote[0].data.active_model) {
+        localStorage.setItem("ghostwaiter:openrouter_model", remote[0].data.active_model);
+      }
+    }
+  } catch (e) {
+    console.warn("Could not load AI providers from Supabase:", e);
+  }
 }
 
 function renderCustomProviders() {
@@ -1207,6 +1280,7 @@ async function initialize() {
   
   applyTheme();
   await loadTranslations();
+  await loadAIProvidersFromSupabase();
   let sidebarState = localStorage.getItem("ghostwaiter:sidebar") || "expanded";
   if (window.innerWidth <= 780) sidebarState = "minimized";
   
