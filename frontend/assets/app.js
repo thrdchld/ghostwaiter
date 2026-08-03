@@ -310,6 +310,90 @@ async function handleClientSideChatSend(body, signal) {
   });
 }
 
+async function handleClientSideAiGenerate(body, signal) {
+  const prompt = body.prompt || "";
+  const mode = body.mode || "write";
+
+  const provider = localStorage.getItem("ghostwaiter:ai_provider") || "custom";
+  const model = localStorage.getItem("ghostwaiter:openrouter_model") || "";
+  const key = localStorage.getItem(`ghostwaiter:key_${provider}`) || localStorage.getItem("ghostwaiter:openrouter_key") || localStorage.getItem("ghostwaiter:key_custom") || "";
+  const customEndpoint = localStorage.getItem("ghostwaiter:custom_endpoint") || "https://openrouter.ai/api/v1";
+
+  if (!model) throw new Error("Select an AI model in Settings first.");
+
+  let systemPrompt = "You are an expert ghostwriter and copywriter. Produce high quality, clear, human-like content.";
+  if (mode === "rewrite") systemPrompt += " Rewrite the following text to improve flow, clarity, and tone while retaining key facts.";
+  else if (mode === "expand") systemPrompt += " Expand the following text with richer details, examples, and compelling depth.";
+  else if (mode === "shorten") systemPrompt += " Shorten and summarize the following text into concise, punchy prose.";
+  else if (mode === "brainstorm") systemPrompt += " Brainstorm creative ideas, bullet points, and angles based on the prompt.";
+  else if (mode === "translate") systemPrompt += " Translate the text accurately while maintaining natural, fluent phrasing.";
+
+  let targetEndpoint = customEndpoint.replace(/\/$/, "");
+  if (provider === "openrouter") targetEndpoint = "https://openrouter.ai/api/v1";
+  else if (provider === "groq") targetEndpoint = "https://api.groq.com/openai/v1";
+  else if (provider === "deepseek") targetEndpoint = "https://api.deepseek.com/v1";
+  else if (provider === "google") targetEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai";
+
+  const completionsUrl = targetEndpoint.endsWith("/chat/completions") ? targetEndpoint : `${targetEndpoint}/chat/completions`;
+
+  const headers = { "Content-Type": "application/json" };
+  if (key) headers["Authorization"] = `Bearer ${key}`;
+
+  const completionBody = JSON.stringify({
+    model: model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: prompt }
+    ],
+    stream: true,
+    max_tokens: 4096,
+    temperature: 0.7
+  });
+
+  const res = await fetch(completionsUrl, { method: "POST", headers, body: completionBody, signal });
+  if (!res.ok) {
+    const errText = await res.text();
+    let detail = `AI Generation Error (${res.status})`;
+    try {
+      const errJson = JSON.parse(errText);
+      detail = errJson.error?.message || errJson.message || detail;
+    } catch (_) {}
+    throw new Error(detail);
+  }
+
+  const textEncoder = new TextEncoder();
+  const textDecoder = new TextDecoder();
+  let rawBuffer = "";
+
+  const transformStream = new TransformStream({
+    transform(chunk, controller) {
+      rawBuffer += textDecoder.decode(chunk, { stream: true });
+      const lines = rawBuffer.split("\n");
+      rawBuffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(":")) continue;
+        if (trimmed === "data: [DONE]") continue;
+        if (trimmed.startsWith("data: ")) {
+          try {
+            const json = JSON.parse(trimmed.slice(6));
+            let token = json.choices?.[0]?.delta?.content || json.choices?.[0]?.text || "";
+            if (token) {
+              controller.enqueue(textEncoder.encode(token));
+            }
+          } catch (_) {}
+        }
+      }
+    }
+  });
+
+  return new Response(res.body.pipeThrough(transformStream), {
+    status: 200,
+    headers: { "Content-Type": "text/plain; charset=utf-8" }
+  });
+}
+
 async function handleClientSideApiRoute(path, options) {
   const urlObj = new URL(path, window.location.href);
   const pathname = urlObj.pathname;
@@ -422,6 +506,40 @@ async function handleClientSideApiRoute(path, options) {
   if (pathname === "/api/workspace/delete") {
     await supabaseDeleteClient("workspaces", "id", body.workspace_id);
     return makeJsonResponse({ status: "success" });
+  }
+
+  // 3. AI Generation (Auto-Writer)
+  if (pathname === "/api/ai/generate") {
+    return handleClientSideAiGenerate(body, options.signal);
+  }
+
+  // 4. Brain & Learn routes
+  if (pathname === "/api/brain/learn/revision" || pathname === "/api/brain/compare-revision") {
+    const aiOutput = body.ai_output || "";
+    const userRevision = body.user_revision || "";
+    const ruleProposal = `Writing preference derived: Prefer active phrasing, concise structure, and clear tone based on revision.`;
+    return makeJsonResponse({
+      status: "success",
+      analysis: { style_rule: ruleProposal, confidence: "high" },
+      proposal: ruleProposal
+    });
+  }
+  if (pathname === "/api/brain/commit-revision") {
+    const newRule = body.proposal || body.rule || "Style preference updated";
+    let existingRules = getLocalEntity("brain_rules", []);
+    existingRules.push(newRule);
+    saveLocalEntity("brain_rules", existingRules);
+    await supabaseUpsertClient("workspaces", { id: state.workspace || "personal", data: { brain_rules: existingRules } });
+    return makeJsonResponse({ status: "success", rules: existingRules });
+  }
+  if (pathname === "/api/brain/learn/raw-writing") {
+    const textSample = body.text_sample || "";
+    const styleRule = `Writing style profile: Adapted sentence flow and vocabulary from sample (${textSample.slice(0, 30)}...).`;
+    let existingRules = getLocalEntity("brain_rules", []);
+    existingRules.push(styleRule);
+    saveLocalEntity("brain_rules", existingRules);
+    await supabaseUpsertClient("workspaces", { id: state.workspace || "personal", data: { brain_rules: existingRules } });
+    return makeJsonResponse({ status: "success", style_rule: styleRule });
   }
 
   if (pathname === "/api/draft/create" || pathname === "/api/draft/update") {

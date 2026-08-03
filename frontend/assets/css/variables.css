@@ -41,6 +41,23 @@
 
   --sidebar-width: 260px;
   --topbar-height: 68px;
+
+  /* Layer Z-Index Tokens */
+  --z-base: 1;
+  --z-sticky: 10;
+  --z-topbar: 50;
+  --z-sidebar: 100;
+  --z-sidebar-backdrop: 90;
+  --z-dropdown: 200;
+  --z-sheet-backdrop: 300;
+  --z-sheet: 310;
+  --z-modal-backdrop: 400;
+  --z-modal: 410;
+  --z-nested-modal-backdrop: 500;
+  --z-nested-modal: 510;
+  --z-loading: 600;
+  --z-toast: 700;
+  --z-tooltip: 800;
 }
 
 :root[data-theme="dark"] {
