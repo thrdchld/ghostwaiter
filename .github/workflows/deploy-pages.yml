@@ -3,6 +3,7 @@ name: Deploy Frontend to GitHub Pages
 on:
   push:
     branches: ["main", "master"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,9 +16,6 @@ concurrency:
 
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
