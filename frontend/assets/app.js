@@ -1918,18 +1918,33 @@ async function performSync(isAuto = false) {
 }
 
 async function loadSyncStatus() {
+  const pill = $("#sync-status");
+  if (!pill) return;
+  if (pill.classList.contains("syncing") || pill.classList.contains("success-anim") || pill.classList.contains("failure-anim")) return;
+
+  const clientUrl = localStorage.getItem("ghostwaiter:supabase_url") || "";
+  const clientKey = localStorage.getItem("ghostwaiter:supabase_key") || "";
+
+  if (clientUrl && clientKey) {
+    try {
+      const res = await fetch(`${clientUrl.replace(/\/$/, "")}/rest/v1/workspaces?select=id&limit=1`, {
+        headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` }
+      });
+      if (res.ok) {
+        pill.className = "sync-button idle online";
+        setTooltip(pill, "Connected to Supabase Cloud & Synced");
+        return;
+      }
+    } catch (e) {
+      console.warn("Direct Supabase connection check:", e);
+    }
+  }
+
   try {
     const data = await jsonApi("/api/sync/status");
-    const pill = $("#sync-status");
-    if (!pill) return;
-    
-    if (pill.classList.contains("syncing") || pill.classList.contains("success-anim") || pill.classList.contains("failure-anim")) {
-      return;
-    }
-    
     if (!data.supabase_configured) {
       pill.className = "sync-button idle offline";
-      setTooltip(pill, "Supabase is not configured — check your environment settings");
+      setTooltip(pill, "Supabase is not configured — configure in Settings > Manage Data");
     } else if (!data.supabase_connected) {
       pill.className = "sync-button idle offline";
       setTooltip(pill, "Offline — failed to connect to Supabase database");
@@ -1937,7 +1952,15 @@ async function loadSyncStatus() {
       pill.className = "sync-button idle online";
       setTooltip(pill, "Connected to Supabase & Synced");
     }
-  } catch (_) {}
+  } catch (_) {
+    if (clientUrl && clientKey) {
+      pill.className = "sync-button idle online";
+      setTooltip(pill, "Connected to Supabase Cloud");
+    } else {
+      pill.className = "sync-button idle offline";
+      setTooltip(pill, "Supabase Cloud Not Configured — click Settings > Manage Data");
+    }
+  }
 }
 
 function bindEvents() {
@@ -2584,7 +2607,39 @@ function bindEvents() {
     if (state.brainTab === "proposals") loadProposals();
   });
   
-  if ($("#manage-data-button")) $("#manage-data-button").onclick = () => $("#data-modal").classList.remove("hidden");
+  if ($("#manage-data-button")) {
+    $("#manage-data-button").onclick = () => {
+      if ($("#supabase-url-input")) $("#supabase-url-input").value = localStorage.getItem("ghostwaiter:supabase_url") || "";
+      if ($("#supabase-key-input")) $("#supabase-key-input").value = localStorage.getItem("ghostwaiter:supabase_key") || "";
+      if ($("#github-token-input")) $("#github-token-input").value = localStorage.getItem("ghostwaiter:github_token") || "";
+      if ($("#github-repo-input")) $("#github-repo-input").value = localStorage.getItem("ghostwaiter:github_repo") || "thrdchld/ghostwaiter";
+      $("#data-modal").classList.remove("hidden");
+    };
+  }
+
+  if ($("#save-sync-config-btn")) {
+    $("#save-sync-config-btn").onclick = async () => {
+      const url = $("#supabase-url-input")?.value.trim() || "";
+      const key = $("#supabase-key-input")?.value.trim() || "";
+      const gToken = $("#github-token-input")?.value.trim() || "";
+      const gRepo = $("#github-repo-input")?.value.trim() || "thrdchld/ghostwaiter";
+
+      if (url) localStorage.setItem("ghostwaiter:supabase_url", url);
+      else localStorage.removeItem("ghostwaiter:supabase_url");
+
+      if (key) localStorage.setItem("ghostwaiter:supabase_key", key);
+      else localStorage.removeItem("ghostwaiter:supabase_key");
+
+      if (gToken) localStorage.setItem("ghostwaiter:github_token", gToken);
+      else localStorage.removeItem("ghostwaiter:github_token");
+
+      if (gRepo) localStorage.setItem("ghostwaiter:github_repo", gRepo);
+
+      toast("Sync credentials saved");
+      await loadSyncStatus();
+    };
+  }
+
   if ($("#modal-import-btn")) $("#modal-import-btn").onclick = () => { $("#import-file").click(); $("#data-modal").classList.add("hidden"); };
   if ($("#data-cancel")) $("#data-cancel").onclick = () => $("#data-modal").classList.add("hidden");
   

@@ -480,13 +480,39 @@
     </div>
   </div>
   <div id="data-modal" class="backdrop modal-overlay hidden">
-    <div class="dialog-card" style="max-width: 400px; width: 90%; padding: 24px;">
-      <h3 style="margin: 0 0 8px 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">Manage Data</h3>
-      <p style="margin-bottom: 20px; color: var(--text-muted); font-size: 0.875rem; line-height: 1.5;">Backup or restore your workspace data either online using GitHub or offline via local files.</p>
+    <div class="dialog-card" style="max-width: 440px; width: 90%; padding: 24px; max-height: 90vh; overflow-y: auto;">
+      <h3 style="margin: 0 0 8px 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">Manage Data & Cloud Sync</h3>
+      <p style="margin-bottom: 20px; color: var(--text-muted); font-size: 0.875rem; line-height: 1.5;">Configure your Supabase Cloud database connection and GitHub backup sync for 100% serverless usage on GitHub Pages.</p>
       
+      <!-- Supabase & GitHub Credentials Section -->
+      <div style="margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+        <h4 style="margin: 0 0 12px 0; font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Supabase & GitHub Connection</h4>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+           <div>
+             <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 4px;">Supabase URL</label>
+             <input type="url" id="supabase-url-input" class="input" placeholder="https://your-project.supabase.co" style="width: 100%; box-sizing: border-box;">
+           </div>
+           <div>
+             <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 4px;">Supabase Anon Key</label>
+             <input type="password" id="supabase-key-input" class="input" placeholder="eyJhbGci..." style="width: 100%; box-sizing: border-box;">
+           </div>
+           <div>
+             <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 4px;">GitHub Personal Token (for Backup Sync)</label>
+             <input type="password" id="github-token-input" class="input" placeholder="ghp_..." style="width: 100%; box-sizing: border-box;">
+           </div>
+           <div>
+             <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 4px;">GitHub Backup Repo</label>
+             <input type="text" id="github-repo-input" class="input" placeholder="thrdchld/ghostwaiter" style="width: 100%; box-sizing: border-box;">
+           </div>
+           <button id="save-sync-config-btn" class="button primary" type="button" style="width:100%; justify-content:center; margin-top: 4px;">
+             Save Credentials
+           </button>
+        </div>
+      </div>
+
       <!-- Online Section -->
       <div style="margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
-        <h4 style="margin: 0 0 12px 0; font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Online Backup (GitHub)</h4>
+        <h4 style="margin: 0 0 12px 0; font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">GitHub Repository Sync</h4>
         <div style="display:flex; flex-direction:column; gap:10px;">
            <button id="sync-pull-btn" class="button primary" type="button" style="width:100%; justify-content:center;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Pull from GitHub
@@ -499,14 +525,14 @@
       
       <!-- Offline Section -->
       <div style="margin-bottom: 24px;">
-        <h4 style="margin: 0 0 12px 0; font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Offline Backup</h4>
+        <h4 style="margin: 0 0 12px 0; font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Offline Local Backup</h4>
         <div style="display:flex; flex-direction:column; gap:10px;">
            <button id="modal-import-btn" class="button primary" type="button" style="width:100%; justify-content:center;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg> Import ZIP File
            </button>
-           <a href="/api/export" id="modal-export-btn" class="button primary" style="width:100%; justify-content:center; text-decoration: none; display: flex; align-items: center; box-sizing: border-box;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 4h14"/></svg> Export ZIP File
-           </a>
+           <button id="modal-export-btn-client" class="button primary" type="button" style="width:100%; justify-content:center;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 4h14"/></svg> Export Data Backup
+           </button>
         </div>
       </div>
       
