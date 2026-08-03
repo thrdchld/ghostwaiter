@@ -1887,33 +1887,53 @@ async function performSync(isAuto = false) {
   if (!btn) return;
   if (btn.classList.contains("syncing")) return;
 
-  btn.className = "sync-button syncing";
-  setTooltip(btn, "Syncing with GitHub...");
+  const clientUrl = localStorage.getItem("ghostwaiter:supabase_url") || window.__ENV__?.SUPABASE_URL || "";
+  const clientKey = localStorage.getItem("ghostwaiter:supabase_key") || window.__ENV__?.SUPABASE_KEY || "";
 
+  btn.className = "sync-button syncing";
+  setTooltip(btn, "Syncing with Supabase Cloud...");
+
+  // Option 1: Direct Client-Side Supabase REST API sync check
+  if (clientUrl && clientKey) {
+    try {
+      const sanitizedUrl = clientUrl.replace(/\/$/, "");
+      const res = await fetch(`${sanitizedUrl}/rest/v1/workspaces?select=id&limit=1`, {
+        headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` }
+      });
+      if (res.ok) {
+        btn.className = "sync-button success-anim online";
+        setTooltip(btn, "Synced with Supabase Cloud");
+        setTimeout(() => {
+          btn.className = "sync-button idle online";
+          setTooltip(btn, "Connected to Supabase Cloud & Synced");
+        }, 1500);
+        return;
+      }
+    } catch (err) {
+      console.warn("Direct Supabase sync warning:", err);
+    }
+  }
+
+  // Option 2: Server backend sync endpoint if available
   try {
     const res = await jsonApi("/api/sync/run", { method: "POST" });
     btn.className = "sync-button success-anim online";
     setTooltip(btn, res.detail || "Synced successfully");
-    
     setTimeout(() => {
       btn.className = "sync-button idle online";
       setTooltip(btn, "Connected to Supabase & Synced");
-    }, 2000);
-    
-    if (res.status === "pulled") {
-      setTimeout(() => {
-        location.reload();
-      }, 1500);
-    }
+    }, 1500);
   } catch (error) {
-    console.error("Sync error:", error);
     btn.className = "sync-button failure-anim offline";
-    setTooltip(btn, "Sync failed: " + error.message);
-    
+    if (!clientUrl || !clientKey) {
+      setTooltip(btn, "Supabase credentials missing — add SUPABASE_URL and SUPABASE_KEY in GitHub Secrets");
+    } else {
+      setTooltip(btn, "Sync failed: " + error.message);
+    }
     setTimeout(() => {
       btn.className = "sync-button idle offline";
-      setTooltip(btn, "Offline - Sync failed");
-    }, 2000);
+      setTooltip(btn, (clientUrl && clientKey) ? "Supabase Offline — Connection Error" : "Supabase Not Configured — Set GitHub Secrets");
+    }, 2500);
   }
 }
 
@@ -1944,7 +1964,7 @@ async function loadSyncStatus() {
     const data = await jsonApi("/api/sync/status");
     if (!data.supabase_configured) {
       pill.className = "sync-button idle offline";
-      setTooltip(pill, "Supabase is not configured — configure in Settings > Manage Data");
+      setTooltip(pill, "Supabase is not configured — configure in Settings > Manage Data or GitHub Secrets");
     } else if (!data.supabase_connected) {
       pill.className = "sync-button idle offline";
       setTooltip(pill, "Offline — failed to connect to Supabase database");
@@ -1958,7 +1978,7 @@ async function loadSyncStatus() {
       setTooltip(pill, "Connected to Supabase Cloud");
     } else {
       pill.className = "sync-button idle offline";
-      setTooltip(pill, "Supabase Cloud Not Configured — click Settings > Manage Data");
+      setTooltip(pill, "Supabase Cloud Not Configured — Add Secrets in GitHub Settings");
     }
   }
 }
