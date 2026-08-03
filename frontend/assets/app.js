@@ -113,7 +113,9 @@ async function api(path, options = {}) {
     config.headers["Content-Type"] = "application/json";
     if (typeof config.body !== "string") config.body = JSON.stringify(config.body);
   }
-  const response = await fetch(path, config);
+  const baseUrl = localStorage.getItem("ghostwaiter:api_base_url") || "";
+  const targetUrl = (path.startsWith("/") && baseUrl) ? baseUrl.replace(/\/$/, "") + path : path;
+  const response = await fetch(targetUrl, config);
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
     try {
@@ -673,12 +675,20 @@ function showView(view) {
 }
 
 async function initialize() {
-  const auth = await jsonApi("/api/auth/status");
-  if (!auth.authenticated) {
+  let auth = { authenticated: true, password_required: false };
+  try {
+    auth = await jsonApi("/api/auth/status");
+  } catch (_) {
+    // Standard default when auth endpoint is not active or frontend runs statically
+  }
+  if (!auth.authenticated && auth.password_required) {
     $("#login-screen").classList.remove("hidden");
+    $("#app").classList.add("hidden");
     return;
   }
+  $("#login-screen").classList.add("hidden");
   $("#app").classList.remove("hidden");
+  if ($("#logout-button")) $("#logout-button").classList.toggle("hidden", !auth.password_required);
   
   applyTheme();
   await loadTranslations();
@@ -2843,11 +2853,7 @@ function bindEvents() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const headers = {};
-      const token = localStorage.getItem("ghostwaiter:session") || state.sessionToken;
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      const response = await fetch("/api/import", { method: "POST", headers, body: formData });
+      const response = await api("/api/import", { method: "POST", body: formData });
       if (!response.ok) throw await response.json().catch(() => ({message: `HTTP ${response.status}`}));
       toast("Import successful! Reloading...", "success");
       setTimeout(() => window.location.reload(), 1500);

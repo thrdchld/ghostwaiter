@@ -1,20 +1,3 @@
----
-title: Ghostwaiter
-emoji: ✍️
-colorFrom: red
-colorTo: pink
-sdk: docker
-app_port: 7860
-fullWidth: true
-pinned: false
-short_description: AI writing coach dengan memori
-tags:
-  - writing
-  - pwa
-  - fastapi
-  - inference-providers
----
-
 # Ghostwaiter
 
 Ghostwaiter adalah aplikasi web penulisan personal yang menggabungkan fitur chat pintar, editor tulisan (Auto Writer), sistem pembelajaran gaya bahasa (Brain Center), dan pengelolaan catatan. 
@@ -55,7 +38,7 @@ Aplikasi ini memiliki sistem penyimpanan hibrida:
 - **Notes Grid**: Catatan cepat terintegrasi dengan filter tag, penyematan (pin), dan unggah gambar.
 - **Brain Center**: Menyimpan aturan gaya bahasa (*style rules*), pola berpikir (*thinking patterns*), dan memori AI yang diekstraksi dari contoh tulisan Anda.
 - **GitHub Sync & Backup**: Sinkronisasi data manual (backup/restore) ke repositori GitHub Anda.
-- **Hugging Face Space & Docker Ready**: Aplikasi siap dideploy langsung ke Hugging Face Spaces menggunakan Docker.
+- **Standalone & Cloud-Ready**: Aplikasi web mandiri berbasis Python FastAPI yang dapat dijalankan secara lokal atau dideploy ke berbagai cloud provider (Vercel, Render, Railway, VPS, Termux, dll.) dengan Supabase sebagai database utama.
 
 ---
 
@@ -142,3 +125,15 @@ pip install -r requirements.txt
 uvicorn app:app --reload --port 7860
 ```
 Buka browser Anda dan akses halaman di `http://localhost:7860`.
+
+---
+
+## Deployment ke GitHub Pages
+
+Frontend aplikasi (HTML/CSS/JS) dapat di-host secara gratis langsung di **GitHub Pages**:
+
+1. Pushed repositori Anda ke GitHub.
+2. Workflow GitHub Actions `.github/workflows/deploy-pages.yml` akan secara otomatis mempublikasikan folder `frontend` ke GitHub Pages.
+3. Masuk ke **Settings > Pages** di repositori GitHub Anda dan pilih Source: **GitHub Actions**.
+4. Jika backend Anda di-host secara terpisah (misalnya di Render/Railway/VPS), Anda dapat mengatur **API Base URL** pada menu Settings di aplikasi agar PWA di GitHub Pages dapat berkomunikasi dengan backend Anda.
+
