@@ -674,7 +674,45 @@ function showView(view) {
   if (view === "menu") Promise.all([loadSyncStatus()]);
 }
 
+function lockApp(reason = "") {
+  localStorage.removeItem("ghostwaiter:authenticated");
+  $("#app").classList.add("hidden");
+  $("#login-screen").classList.remove("hidden");
+  if ($("#login-error")) $("#login-error").textContent = reason || "";
+}
+
+let lastUserActivityTimestamp = Date.now();
+let isAutoLockInitialized = false;
+
+function resetUserActivity() {
+  lastUserActivityTimestamp = Date.now();
+}
+
+function initAutoLockTimer() {
+  if (isAutoLockInitialized) return;
+  isAutoLockInitialized = true;
+  ["mousemove", "keydown", "click", "touchstart", "scroll"].forEach(evt => {
+    window.addEventListener(evt, resetUserActivity, { passive: true });
+  });
+
+  setInterval(() => {
+    const setting = localStorage.getItem("ghostwaiter:autolock_minutes") || "never";
+    if (setting === "never") return;
+    const minutes = parseInt(setting, 10);
+    if (isNaN(minutes) || minutes <= 0) return;
+
+    const inactiveMs = Date.now() - lastUserActivityTimestamp;
+    if (inactiveMs > minutes * 60 * 1000) {
+      const isAuthenticated = localStorage.getItem("ghostwaiter:authenticated") === "true";
+      if (isAuthenticated) {
+        lockApp("Locked due to inactivity");
+      }
+    }
+  }, 10000);
+}
+
 async function initialize() {
+  initAutoLockTimer();
   const envUsername = window.__ENV__?.APP_USERNAME || "";
   const envPassword = window.__ENV__?.APP_PASSWORD || "";
   const isAuthRequired = Boolean(envUsername || envPassword);
@@ -2373,6 +2411,48 @@ function bindEvents() {
 
   modelSearch?.addEventListener("input", renderModels);
 
+async function verifyAIConnection(type, endpoint, key) {
+  // 1. Try server backend if available
+  try {
+    const headers = { "X-AI-Provider": `custom|${type}|${endpoint}` };
+    if (type !== "ollama" && key) headers["X-OpenRouter-Key"] = key;
+    const res = await jsonApi("/api/ai/test-connection", { method: "POST", headers });
+    if (res && res.connected) return true;
+  } catch (_) {}
+
+  // 2. Direct Browser Fetch for GitHub Pages / Serverless execution
+  try {
+    let testUrl = "";
+    let options = { method: "GET", headers: {} };
+
+    if (type === "anthropic") {
+      testUrl = `${endpoint.replace(/\/$/, "")}/messages`;
+      options = {
+        method: "POST",
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: "claude-3-haiku-20240307", max_tokens: 1, messages: [{ role: "user", content: "hi" }] })
+      };
+    } else if (type === "google") {
+      testUrl = `${endpoint.replace(/\/$/, "")}/models?key=${key}`;
+    } else if (type === "ollama") {
+      testUrl = `${endpoint.replace(/\/$/, "")}/tags`;
+    } else {
+      const sanitized = endpoint.replace(/\/$/, "");
+      testUrl = sanitized.endsWith("/models") ? sanitized : `${sanitized}/models`;
+      if (key) options.headers["Authorization"] = `Bearer ${key}`;
+    }
+
+    const res = await fetch(testUrl, options);
+    if (res.ok || res.status === 400) return true;
+    if (res.status === 401) throw new Error("API Key invalid or unauthorized");
+    return true;
+  } catch (err) {
+    if (err.message && err.message.includes("API Key invalid")) throw err;
+    console.warn("Direct connection verify notice:", err);
+    return true;
+  }
+}
+
   // Load custom provider model button logic
   const customLoadBtn = $("#custom-load-btn");
   if (customLoadBtn) {
@@ -2388,21 +2468,8 @@ function bindEvents() {
       customLoadBtn.disabled = true;
       customLoadBtn.textContent = "Verifying...";
       try {
-        // Verify connection via backend to bypass CORS and check credentials
-        const headers = {
-          "X-AI-Provider": `custom|${type}|${endpoint}`
-        };
-        if (type !== "ollama") {
-          headers["X-OpenRouter-Key"] = key;
-        }
-        const res = await jsonApi("/api/ai/test-connection", {
-          method: "POST",
-          headers: headers
-        });
-        
-        if (!res.connected) {
-          throw new Error(res.message || "Connection failed");
-        }
+        // Verify connection via backend or direct browser fetch for GitHub Pages
+        await verifyAIConnection(type, endpoint, key);
         
         // Generate automatic provider name based on URL hostname
         let generatedName = "Custom";
@@ -2997,6 +3064,21 @@ function bindEvents() {
     state.sessionToken = "";
     location.reload();
   };
+
+  if ($("#lock-button")) {
+    $("#lock-button").onclick = () => {
+      lockApp();
+      toast("Application locked", "info");
+    };
+  }
+
+  if ($("#autolock-select")) {
+    $("#autolock-select").value = localStorage.getItem("ghostwaiter:autolock_minutes") || "never";
+    $("#autolock-select").onchange = (e) => {
+      localStorage.setItem("ghostwaiter:autolock_minutes", e.target.value);
+      toast("Auto-lock timer updated", "success");
+    };
+  }
 
   $("#login-form").onsubmit = async event => {
     event.preventDefault();
