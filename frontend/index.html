@@ -29,7 +29,7 @@
     </form>
   </div>
 
-  <div id="app" class="app-shell hidden">
+  <div id="app" class="app-shell">
     <aside id="sidebar" class="sidebar expanded">
       <div class="sidebar-header">
         <button id="sidebar-toggle" class="icon-button" aria-label="Toggle Menu" style="padding:4px; flex-shrink: 0; margin-right: 8px;">
@@ -703,6 +703,17 @@
     <div class="loading-text" id="loading-text">Syncing...</div>
   </div>
   <div id="toast" class="toast hidden"></div>
-  <script src="./assets/app.js?v=7" defer></script>
+  <script src="./assets/app.js?v=8" defer></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      setTimeout(function() {
+        var app = document.getElementById("app");
+        var login = document.getElementById("login-screen");
+        if (app && app.classList.contains("hidden") && login && login.classList.contains("hidden")) {
+          app.classList.remove("hidden");
+        }
+      }, 100);
+    });
+  </script>
 </body>
 </html>
