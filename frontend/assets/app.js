@@ -900,7 +900,8 @@ async function loadAIProvidersFromSupabase() {
     if (remote && remote.length && remote[0].data) {
       const data = remote[0].data;
       if (data.custom_providers) {
-        localStorage.setItem("ghostwaiter:custom_providers", JSON.stringify(data.custom_providers));
+        const strProviders = typeof data.custom_providers === "string" ? data.custom_providers : JSON.stringify(data.custom_providers);
+        localStorage.setItem("ghostwaiter:custom_providers", strProviders);
       }
       if (data.active_provider_id) {
         localStorage.setItem("ghostwaiter:custom_active_id", data.active_provider_id);
@@ -909,6 +910,15 @@ async function loadAIProvidersFromSupabase() {
       if (data.active_model) {
         localStorage.setItem("ghostwaiter:openrouter_model", data.active_model);
       }
+      if (data.custom_endpoint) {
+        localStorage.setItem("ghostwaiter:custom_endpoint", data.custom_endpoint);
+      }
+      if (data.custom_key) {
+        localStorage.setItem("ghostwaiter:key_custom", data.custom_key);
+      }
+
+      renderCustomProviders();
+      populateProvidersDropdown();
       updateModelIndicator();
     }
   } catch (e) {
@@ -1303,7 +1313,11 @@ function showView(view) {
   localStorage.setItem("ghostwaiter:activeView", view);
   if (view === "brain") loadBrain();
   if (view === "notes") loadNotes();
-  if (view === "menu") Promise.all([loadSyncStatus()]);
+  if (view === "menu") {
+    renderCustomProviders();
+    populateProvidersDropdown();
+    Promise.all([loadSyncStatus()]);
+  }
 }
 
 function lockApp(reason = "") {
