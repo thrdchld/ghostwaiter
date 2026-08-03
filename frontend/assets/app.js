@@ -2274,13 +2274,89 @@ function bindEvents() {
     }
   };
 
-  window.loadModelsForProvider = async function(providerId) {
+async function fetchModelsForProvider(p) {
+  // 1. Try server backend if available
+  try {
+    const res = await jsonApi("/api/ai/list-models", {
+      method: "POST",
+      headers: {
+        "X-AI-Provider": `custom|${p.type || "openai"}|${p.endpoint}`,
+        "X-OpenRouter-Key": p.key || ""
+      }
+    });
+    if (res && Array.isArray(res.models) && res.models.length > 0) {
+      return res.models;
+    }
+  } catch (_) {}
+
+  // 2. Direct Browser Fetch based on Provider Type & Endpoint for GitHub Pages
+  const type = p.type || "openai";
+  const endpoint = (p.endpoint || "").replace(/\/$/, "");
+  const key = p.key || "";
+
+  if (type === "anthropic") {
+    return [
+      "claude-3-5-sonnet-latest",
+      "claude-3-5-haiku-latest",
+      "claude-3-opus-latest",
+      "claude-3-haiku-20240307"
+    ];
+  }
+
+  if (type === "google") {
+    const url = `${endpoint}/models?key=${key}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Google API (${res.status}): ${await res.text()}`);
+    const data = await res.json();
+    const models = (data.models || []).map(m => m.name ? m.name.replace(/^models\//, "") : m);
+    if (!models.length) throw new Error("No Gemini models returned");
+    return models;
+  }
+
+  if (type === "ollama") {
+    const url = `${endpoint}/tags`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Ollama API (${res.status})`);
+    const data = await res.json();
+    const models = (data.models || []).map(m => m.name || m.model);
+    if (!models.length) throw new Error("No Ollama models found");
+    return models;
+  }
+
+  // Default OpenAI / OpenRouter / Groq / DeepSeek / Custom endpoint
+  let url = endpoint;
+  if (!url.endsWith("/models")) {
+    url = `${url}/models`;
+  }
+
+  const headers = {};
+  if (key) headers["Authorization"] = `Bearer ${key}`;
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`API Error (${res.status}): ${errText.slice(0, 120)}`);
+  }
+
+  const data = await res.json();
+  const rawList = Array.isArray(data) ? data : (data.data || data.models || []);
+  const models = rawList.map(m => typeof m === "string" ? m : (m.id || m.name)).filter(Boolean);
+
+  if (!models.length) {
+    throw new Error("No models returned by API endpoint");
+  }
+
+  return models;
+}
+
+  window.loadModelsForProvider = async (providerId) => {
+    const modelsList = $("#ai-models-list");
     if (!modelsList) return;
     
     modelsList.innerHTML = `
       <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 20px; gap:8px;">
         <div class="spinner" style="width:20px; height:20px; border-width:2px; border-color: var(--accent) transparent var(--accent) transparent; border-style: solid; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-        <span style="font-size: 12px; color: var(--text-secondary);">Verifying provider connection...</span>
+        <span style="font-size: 12px; color: var(--text-secondary);">Verifying provider connection & fetching models...</span>
       </div>
     `;
     
@@ -2292,19 +2368,7 @@ function bindEvents() {
     }
 
     try {
-      const res = await jsonApi("/api/ai/list-models", {
-        method: "POST",
-        headers: {
-          "X-AI-Provider": `custom|${p.type || "openai"}|${p.endpoint}`,
-          "X-OpenRouter-Key": p.key || ""
-        }
-      });
-
-      const models = Array.isArray(res.models) ? res.models : [];
-      if (!models.length) {
-        throw new Error("No models returned by provider");
-      }
-
+      const models = await fetchModelsForProvider(p);
       allModels = models.map(m => ({ id: m, name: m }));
       renderModels();
       
