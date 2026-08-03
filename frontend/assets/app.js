@@ -1276,30 +1276,36 @@ async function initialize() {
   }
   $("#login-screen").classList.add("hidden");
   $("#app").classList.remove("hidden");
-  if ($("#logout-button")) $("#logout-button").classList.toggle("hidden", !requiresAuth);
   
   applyTheme();
-  await loadTranslations();
-  await loadAIProvidersFromSupabase();
+  initNotesSystem();
+
+  // Show active view IMMEDIATELY so app is NEVER blank
+  const lastView = localStorage.getItem("ghostwaiter:activeView") || "chat";
+  showView(lastView);
+
   let sidebarState = localStorage.getItem("ghostwaiter:sidebar") || "expanded";
   if (window.innerWidth <= 780) sidebarState = "minimized";
   
   if (sidebarState === "minimized") {
-    $("#sidebar").classList.add("minimized");
-    $("#sidebar").classList.remove("expanded");
-    $("#app").classList.add("sidebar-minimized");
+    $("#sidebar")?.classList.add("minimized");
+    $("#sidebar")?.classList.remove("expanded");
+    $("#app")?.classList.add("sidebar-minimized");
   } else {
-    $("#app").classList.remove("sidebar-minimized");
-    $("#sidebar").classList.remove("minimized");
-    $("#sidebar").classList.add("expanded");
+    $("#app")?.classList.remove("sidebar-minimized");
+    $("#sidebar")?.classList.remove("minimized");
+    $("#sidebar")?.classList.add("expanded");
   }
 
-  const lastView = localStorage.getItem("ghostwaiter:activeView") || "chat";
-  initNotesSystem();
-  showView(lastView);
-  await loadWorkspaces();
+  // Non-blocking async data synchronization
+  try { await loadTranslations(); } catch (_) {}
+  try { await loadAIProvidersFromSupabase(); } catch (_) {}
+  try { await loadWorkspaces(); } catch (_) {}
+  
   runBackgroundNoteSync();
-  if (lastView === "notes") loadNotes();
+  if (lastView === "notes") {
+    try { loadNotes(); } catch (_) {}
+  }
   
   setInterval(() => {
     const activeView = localStorage.getItem("ghostwaiter:activeView");
@@ -1308,12 +1314,14 @@ async function initialize() {
     }
   }, 4000);
 
-  await Promise.all([loadSyncStatus(), syncAIConfigFromSupabase()]);
+  try {
+    await Promise.all([loadSyncStatus(), syncAIConfigFromSupabase()]);
+  } catch (_) {}
+  
   restoreLocalDraft();
   restoreChatDraft();
   updateModelIndicator();
 
-  // Automatic sync logic (device baru atau sudah lama tidak dibuka)
   const lastOpenedStr = localStorage.getItem("ghostwaiter:last_opened");
   const now = Date.now();
   let shouldAutoSync = false;
